@@ -6,6 +6,7 @@ import appCss from '../styles.css?url'
 import { getCurrentUserFn } from '@/utils/auth/auth.functions'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider } from '@/components/providers/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 
 export const Route = createRootRoute({
   beforeLoad: async () => {
@@ -43,6 +44,7 @@ function RootComponent({ children }: { children: React.ReactNode }) {
       <ThemeProvider>
         <TooltipProvider>
           {children}
+          <Toaster position="bottom-right" />
         </TooltipProvider>
       </ThemeProvider>
     </RootDocument>

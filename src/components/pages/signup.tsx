@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { signupFn } from '@/utils/auth/auth.functions'
 import { parseFormError } from '@/utils/auth/parse-form-error'
 import { IconThemeToggle } from '@/components/features/theme-toggle/icon-theme-toggle'
@@ -15,15 +15,17 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 
 export function SignupPage() {
-  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  const [success, setSuccess] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -38,7 +40,7 @@ export function SignupPage() {
     setSubmitting(true)
     try {
       await signupFn({ data: { email, password } })
-      await navigate({ to: '/login' })
+      setSuccess(true)
     } catch (err) {
       const parsed = parseFormError(err)
       setError(parsed.message)
@@ -46,6 +48,43 @@ export function SignupPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (success) {
+    return (
+      <div className="flex min-h-svh flex-col items-center justify-center bg-background">
+        <div className="absolute top-4 right-4">
+          <IconThemeToggle />
+        </div>
+
+        <Card className="w-full max-w-sm text-center">
+          <CardHeader>
+            <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-primary/10">
+              <HugeiconsIcon
+                icon={CheckmarkCircle02Icon}
+                className="size-6 text-primary"
+                strokeWidth={2}
+              />
+            </div>
+            <CardTitle className="text-lg">Account created</CardTitle>
+            <CardDescription>
+              Your account is pending approval. An admin will review and approve
+              your account before you can log in.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex flex-col gap-3">
+            <Button
+              size="lg"
+              className="w-full"
+              nativeButton={false}
+              render={<Link to="/login" />}
+            >
+              Back to login
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
   }
 
   return (

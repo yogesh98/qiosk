@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Route } from '@/routes/_authed/admin/configurations'
+import { Route } from '@/routes/_authed/management/configurations'
 import {
   createKioskConfigurationFn,
   listKioskConfigurationsFn,
   updateKioskConfigurationNameFn,
   deleteKioskConfigurationFn,
 } from '@/utils/kiosk-configurations/kiosk-configurations.functions'
+import { toast } from 'sonner'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Add01Icon,
@@ -135,9 +136,11 @@ function ConfigurationRow({
       await updateKioskConfigurationNameFn({
         data: { id: config.id, name: trimmed },
       })
+      toast.success('Configuration renamed')
       onMutated()
       setEditing(false)
     } catch {
+      toast.error('Failed to rename configuration')
       setEditName(config.name)
     } finally {
       setSaving(false)
@@ -148,7 +151,10 @@ function ConfigurationRow({
     setDeleting(true)
     try {
       await deleteKioskConfigurationFn({ data: { id: config.id } })
+      toast.success(`Deleted "${config.name}"`)
       onMutated()
+    } catch {
+      toast.error('Failed to delete configuration')
     } finally {
       setDeleting(false)
       setDeleteDialogOpen(false)
@@ -320,11 +326,13 @@ function CreateDialog({ onCreated }: { onCreated: () => void }) {
           height: Number(height),
         },
       })
+      toast.success(`Created "${name.trim()}"`)
       setOpen(false)
       resetForm()
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
+      toast.error('Failed to create configuration')
     } finally {
       setSubmitting(false)
     }

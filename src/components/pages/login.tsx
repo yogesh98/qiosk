@@ -33,11 +33,15 @@ export function LoginPage() {
     try {
       const result = await loginFn({ data: { email, password } })
       if (result?.error) {
-        setError(result.error)
+        setError(
+          result.error === 'not_approved'
+            ? 'An admin needs to approve your account. Please contact your admin'
+            : result.error,
+        )
         return
       }
       await router.invalidate()
-      router.navigate({ to: '/admin/configurations' })
+      router.navigate({ to: '/management/configurations' })
     } catch (err) {
       const parsed = parseFormError(err)
       setError(parsed.message)

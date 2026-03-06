@@ -17,14 +17,15 @@ export const signupFn = createServerFn({ method: 'POST' })
 export const loginFn = createServerFn({ method: 'POST' })
   .inputValidator(credsSchema)
   .handler(async ({ data }) => {
-    const user = await verifyUser(data.email, data.password)
-    if (!user) return { error: 'Invalid credentials' as const }
+    const result = await verifyUser(data.email, data.password)
+    if (!result) return { error: 'Invalid credentials' as const }
+    if ('notApproved' in result) return { error: 'not_approved' as const }
 
     const session = await useAppSession()
     await session.update({
-      userId: user.id,
-      userEmail: user.email,
-      role: user.role,
+      userId: result.id,
+      userEmail: result.email,
+      role: result.role,
     })
   })
 
@@ -37,6 +38,8 @@ export const getCurrentUserFn = createServerFn({ method: 'GET' }).handler(
   async () => {
     const session = await useAppSession()
     if (!session.data.userId) return null
-    return getUserById(session.data.userId)
+    const user = await getUserById(session.data.userId)
+    if (!user?.isApproved) return null
+    return user
   },
 )
