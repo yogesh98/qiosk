@@ -2,12 +2,18 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { useAppSession } from '@/utils/session.server'
 import {
+  appendKioskConfigurationContentEdit,
   createKioskConfiguration,
+  getKioskConfigurationEditorState,
   getKioskConfigurationsByUser,
   getKioskConfigurationById,
+  listKioskConfigurationContentVersions,
+  saveKioskConfigurationContentVersion,
+  undoKioskConfigurationContentEdit,
   updateKioskConfigurationName,
   deleteKioskConfiguration,
 } from '@/utils/kiosk-configurations/kiosk-configurations.server'
+import { kioskConfigurationContentSchema } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
@@ -22,6 +28,13 @@ const updateNameSchema = z.object({
 
 const byIdSchema = z.object({
   id: z.string(),
+})
+
+const appendContentEditSchema = z.object({
+  id: z.string(),
+  changeType: z.string().min(1).max(100),
+  content: kioskConfigurationContentSchema,
+  baseVersionId: z.string().optional(),
 })
 
 async function requireUserId() {
@@ -48,6 +61,65 @@ export const getKioskConfigurationFn = createServerFn({ method: 'GET' })
   .handler(async ({ data }) => {
     const userId = await requireUserId()
     return getKioskConfigurationById(data.id, userId)
+  })
+
+export const getKioskConfigurationEditorStateFn = createServerFn({ method: 'GET' })
+  .inputValidator(byIdSchema)
+  .handler(async ({ data }) => {
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return (await getKioskConfigurationEditorState(data.id, userId))!
+  })
+
+export const listKioskConfigurationContentVersionsFn = createServerFn({
+  method: 'GET',
+})
+  .inputValidator(byIdSchema)
+  .handler(async ({ data }) => {
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return listKioskConfigurationContentVersions(data.id, userId)
+  })
+
+export const appendKioskConfigurationContentEditFn = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(appendContentEditSchema)
+  .handler(async ({ data }) => {
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return appendKioskConfigurationContentEdit(
+      data.id,
+      data.changeType,
+      data.content,
+      userId,
+      data.baseVersionId,
+    )
+  })
+
+export const undoKioskConfigurationContentEditFn = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(byIdSchema)
+  .handler(async ({ data }) => {
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return undoKioskConfigurationContentEdit(data.id, userId)
+  })
+
+export const saveKioskConfigurationContentVersionFn = createServerFn({
+  method: 'POST',
+})
+  .inputValidator(byIdSchema)
+  .handler(async ({ data }) => {
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return saveKioskConfigurationContentVersion(data.id, userId)
   })
 
 export const updateKioskConfigurationNameFn = createServerFn({ method: 'POST' })
