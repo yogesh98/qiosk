@@ -3,8 +3,15 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 
 import appCss from '../styles.css?url'
+import { getCurrentUserFn } from '@/utils/auth/auth.functions'
+import { TooltipProvider } from '@/components/ui/tooltip'
+import { ThemeProvider } from '@/components/providers/theme-provider'
 
 export const Route = createRootRoute({
+  beforeLoad: async () => {
+    const user = await getCurrentUserFn()
+    return { user }
+  },
   head: () => ({
     meta: [
       {
@@ -15,7 +22,7 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'Qiosk',
       },
     ],
     links: [
@@ -26,8 +33,21 @@ export const Route = createRootRoute({
     ],
   }),
 
-  shellComponent: RootDocument,
+  shellComponent: RootComponent,
+  notFoundComponent: () => <div>Not Found</div>,
 })
+
+function RootComponent({ children }: { children: React.ReactNode }) {
+  return (
+    <RootDocument>
+      <ThemeProvider>
+        <TooltipProvider>
+          {children}
+        </TooltipProvider>
+      </ThemeProvider>
+    </RootDocument>
+  )
+}
 
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
