@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedManagementRouteImport } from './routes/_authed/management'
 import { Route as AuthedManagementUsersRouteImport } from './routes/_authed/management/users'
 import { Route as AuthedManagementConfigurationsRouteImport } from './routes/_authed/management/configurations'
+import { Route as AuthedEditorKioskIdRouteImport } from './routes/_authed/editor.$kioskId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -52,12 +53,18 @@ const AuthedManagementConfigurationsRoute =
     path: '/configurations',
     getParentRoute: () => AuthedManagementRoute,
   } as any)
+const AuthedEditorKioskIdRoute = AuthedEditorKioskIdRouteImport.update({
+  id: '/editor/$kioskId',
+  path: '/editor/$kioskId',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/management': typeof AuthedManagementRouteWithChildren
+  '/editor/$kioskId': typeof AuthedEditorKioskIdRoute
   '/management/configurations': typeof AuthedManagementConfigurationsRoute
   '/management/users': typeof AuthedManagementUsersRoute
 }
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/management': typeof AuthedManagementRouteWithChildren
+  '/editor/$kioskId': typeof AuthedEditorKioskIdRoute
   '/management/configurations': typeof AuthedManagementConfigurationsRoute
   '/management/users': typeof AuthedManagementUsersRoute
 }
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_authed/management': typeof AuthedManagementRouteWithChildren
+  '/_authed/editor/$kioskId': typeof AuthedEditorKioskIdRoute
   '/_authed/management/configurations': typeof AuthedManagementConfigurationsRoute
   '/_authed/management/users': typeof AuthedManagementUsersRoute
 }
@@ -86,6 +95,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/management'
+    | '/editor/$kioskId'
     | '/management/configurations'
     | '/management/users'
   fileRoutesByTo: FileRoutesByTo
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/management'
+    | '/editor/$kioskId'
     | '/management/configurations'
     | '/management/users'
   id:
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/_authed/management'
+    | '/_authed/editor/$kioskId'
     | '/_authed/management/configurations'
     | '/_authed/management/users'
   fileRoutesById: FileRoutesById
@@ -165,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedManagementConfigurationsRouteImport
       parentRoute: typeof AuthedManagementRoute
     }
+    '/_authed/editor/$kioskId': {
+      id: '/_authed/editor/$kioskId'
+      path: '/editor/$kioskId'
+      fullPath: '/editor/$kioskId'
+      preLoaderRoute: typeof AuthedEditorKioskIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
@@ -183,10 +202,12 @@ const AuthedManagementRouteWithChildren =
 
 interface AuthedRouteChildren {
   AuthedManagementRoute: typeof AuthedManagementRouteWithChildren
+  AuthedEditorKioskIdRoute: typeof AuthedEditorKioskIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedManagementRoute: AuthedManagementRouteWithChildren,
+  AuthedEditorKioskIdRoute: AuthedEditorKioskIdRoute,
 }
 
 const AuthedRouteWithChildren =

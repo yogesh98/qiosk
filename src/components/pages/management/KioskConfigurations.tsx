@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useRouter } from '@tanstack/react-router'
+import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { Route } from '@/routes/_authed/management/configurations'
 import {
   createKioskConfigurationFn,
@@ -17,6 +17,7 @@ import {
   Tick02Icon,
   Cancel01Icon,
   MoreVerticalIcon,
+  ArrowRight01Icon,
 } from '@hugeicons/core-free-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -118,6 +119,7 @@ function ConfigurationRow({
   config: KioskConfig
   onMutated: () => void
 }) {
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(config.name)
   const [saving, setSaving] = useState(false)
@@ -207,11 +209,19 @@ function ConfigurationRow({
             </Button>
           </div>
         ) : (
-          <p className="truncate text-sm font-medium">{config.name}</p>
+          <Link
+            to="/editor/$kioskId"
+            params={{ kioskId: config.id }}
+            className="block focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md -m-1 p-1"
+          >
+            <p className="truncate text-sm font-medium hover:underline">
+              {config.name}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {config.width} × {config.height}
+            </p>
+          </Link>
         )}
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {config.width} × {config.height}
-        </p>
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -224,6 +234,14 @@ function ConfigurationRow({
             <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() =>
+                navigate({ to: '/editor/$kioskId', params: { kioskId: config.id } })
+              }
+            >
+              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
+              Open in Editor
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
                 setEditName(config.name)
