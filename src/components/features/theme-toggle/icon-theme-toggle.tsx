@@ -1,16 +1,29 @@
+import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Sun02Icon, Moon02Icon } from '@hugeicons/core-free-icons'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export function IconThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  if (!mounted) {
+    return (
+      <button
+        type="button"
+        className="inline-flex size-9 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
+        aria-label="Toggle theme"
+      />
+    )
+  }
 
   return (
     <button
       type="button"
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      className="inline-flex size-9 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-black/5 hover:text-gray-900 dark:text-white/70 dark:hover:bg-white/10 dark:hover:text-white"
       aria-label="Toggle theme"
     >
       <HugeiconsIcon

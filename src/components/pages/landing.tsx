@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { IconThemeToggle } from '@/components/features/theme-toggle/icon-theme-toggle'
 
@@ -21,10 +22,12 @@ export function LandingPage() {
         />
 
         <div className="flex gap-3">
-          <Button size="lg">
+          <Button size="lg" nativeButton={false} render={<Link to="/login" />}>
             Log in
           </Button>
-          <Button size="lg">Sign up</Button>
+          <Button size="lg" nativeButton={false} render={<Link to="/signup" />}>
+            Sign up
+          </Button>
         </div>
       </div>
     </div>

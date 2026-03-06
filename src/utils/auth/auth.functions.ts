@@ -1,5 +1,4 @@
 import { createServerFn } from '@tanstack/react-start'
-import { redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { useAppSession } from '@/utils/session.server'
 import { createUser, verifyUser, getUserById } from '@/utils/auth/auth.server'
@@ -12,16 +11,7 @@ const credsSchema = z.object({
 export const signupFn = createServerFn({ method: 'POST' })
   .inputValidator(credsSchema)
   .handler(async ({ data }) => {
-    const user = await createUser(data.email, data.password)
-
-    const session = await useAppSession()
-    await session.update({
-      userId: user.id,
-      userEmail: user.email,
-      role: user.role,
-    })
-
-    // throw redirect({ to: '/_authed' })
+    await createUser(data.email, data.password)
   })
 
 export const loginFn = createServerFn({ method: 'POST' })
@@ -36,14 +26,11 @@ export const loginFn = createServerFn({ method: 'POST' })
       userEmail: user.email,
       role: user.role,
     })
-
-    // throw redirect({ to: '/_authed' })
   })
 
 export const logoutFn = createServerFn({ method: 'POST' }).handler(async () => {
   const session = await useAppSession()
   await session.clear()
-  throw redirect({ to: '/' })
 })
 
 export const getCurrentUserFn = createServerFn({ method: 'GET' }).handler(
