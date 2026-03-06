@@ -17,4 +17,18 @@ model User {
   role         String   @default("user")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  kioskConfigurations KioskConfiguration[]
+}
+
+model KioskConfiguration {
+  id         String   @id @default(cuid())
+  name   String
+  width  Int    // immutable after creation
+  height Int    // immutable after creation
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  createdBy   User   @relation(fields: [createdById], references: [id])
+  createdById String
 }

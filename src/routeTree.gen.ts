@@ -13,7 +13,8 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthedCmsRouteImport } from './routes/_authed/cms'
+import { Route as AuthedAdminRouteImport } from './routes/_authed/admin'
+import { Route as AuthedAdminConfigurationsRouteImport } from './routes/_authed/admin/configurations'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -34,23 +35,31 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthedCmsRoute = AuthedCmsRouteImport.update({
-  id: '/cms',
-  path: '/cms',
+const AuthedAdminRoute = AuthedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedAdminConfigurationsRoute =
+  AuthedAdminConfigurationsRouteImport.update({
+    id: '/configurations',
+    path: '/configurations',
+    getParentRoute: () => AuthedAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/cms': typeof AuthedCmsRoute
+  '/admin': typeof AuthedAdminRouteWithChildren
+  '/admin/configurations': typeof AuthedAdminConfigurationsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/cms': typeof AuthedCmsRoute
+  '/admin': typeof AuthedAdminRouteWithChildren
+  '/admin/configurations': typeof AuthedAdminConfigurationsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -58,14 +67,22 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/_authed/cms': typeof AuthedCmsRoute
+  '/_authed/admin': typeof AuthedAdminRouteWithChildren
+  '/_authed/admin/configurations': typeof AuthedAdminConfigurationsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/cms'
+  fullPaths: '/' | '/login' | '/signup' | '/admin' | '/admin/configurations'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/cms'
-  id: '__root__' | '/' | '/_authed' | '/login' | '/signup' | '/_authed/cms'
+  to: '/' | '/login' | '/signup' | '/admin' | '/admin/configurations'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authed'
+    | '/login'
+    | '/signup'
+    | '/_authed/admin'
+    | '/_authed/admin/configurations'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -105,22 +122,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authed/cms': {
-      id: '/_authed/cms'
-      path: '/cms'
-      fullPath: '/cms'
-      preLoaderRoute: typeof AuthedCmsRouteImport
+    '/_authed/admin': {
+      id: '/_authed/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthedAdminRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/_authed/admin/configurations': {
+      id: '/_authed/admin/configurations'
+      path: '/configurations'
+      fullPath: '/admin/configurations'
+      preLoaderRoute: typeof AuthedAdminConfigurationsRouteImport
+      parentRoute: typeof AuthedAdminRoute
     }
   }
 }
 
+interface AuthedAdminRouteChildren {
+  AuthedAdminConfigurationsRoute: typeof AuthedAdminConfigurationsRoute
+}
+
+const AuthedAdminRouteChildren: AuthedAdminRouteChildren = {
+  AuthedAdminConfigurationsRoute: AuthedAdminConfigurationsRoute,
+}
+
+const AuthedAdminRouteWithChildren = AuthedAdminRoute._addFileChildren(
+  AuthedAdminRouteChildren,
+)
+
 interface AuthedRouteChildren {
-  AuthedCmsRoute: typeof AuthedCmsRoute
+  AuthedAdminRoute: typeof AuthedAdminRouteWithChildren
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedCmsRoute: AuthedCmsRoute,
+  AuthedAdminRoute: AuthedAdminRouteWithChildren,
 }
 
 const AuthedRouteWithChildren =

@@ -37,7 +37,7 @@ export function LoginPage() {
         return
       }
       await router.invalidate()
-      router.navigate({ to: '/cms' })
+      router.navigate({ to: '/admin/configurations' })
     } catch (err) {
       const parsed = parseFormError(err)
       setError(parsed.message)
