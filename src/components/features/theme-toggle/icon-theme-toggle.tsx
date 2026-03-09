@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Sun02Icon, Moon02Icon } from '@hugeicons/core-free-icons'
+import { Moon02Icon, Sun02Icon } from '@hugeicons/core-free-icons'
 
 export function IconThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme()

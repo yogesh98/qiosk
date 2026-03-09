@@ -40,8 +40,8 @@ export function LoginPage() {
         )
         return
       }
-      await router.invalidate()
-      router.navigate({ to: '/management/configurations' })
+      await router.invalidate({ sync: true })
+      await router.navigate({ to: '/management/configurations' })
     } catch (err) {
       const parsed = parseFormError(err)
       setError(parsed.message)

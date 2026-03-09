@@ -1,7 +1,8 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { useAppSession } from '@/utils/session.server'
-import { createUser, verifyUser, getUserById } from '@/utils/auth/auth.server'
+import { createUser, verifyUser } from '@/utils/auth/auth.server'
+import { requireApprovedUser } from '@/utils/auth/rbac'
 
 const credsSchema = z.object({
   email: z.string().max(255).pipe(z.email()),
@@ -36,10 +37,10 @@ export const logoutFn = createServerFn({ method: 'POST' }).handler(async () => {
 
 export const getCurrentUserFn = createServerFn({ method: 'GET' }).handler(
   async () => {
-    const session = await useAppSession()
-    if (!session.data.userId) return null
-    const user = await getUserById(session.data.userId)
-    if (!user?.isApproved) return null
-    return user
+    try {
+      return await requireApprovedUser()
+    } catch {
+      return null
+    }
   },
 )

@@ -1,9 +1,10 @@
+import type {KioskConfigurationContent} from '@/utils/kiosk-configurations/kiosk-configuration-content.schema';
 import { prisma } from '@/utils/db.server'
 import {
+  
   createEmptyKioskConfigurationContent,
   parseKioskConfigurationContent,
-  serializeKioskConfigurationContent,
-  type KioskConfigurationContent,
+  serializeKioskConfigurationContent
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 
 type ContentEditRecord = {
@@ -42,7 +43,7 @@ export type KioskConfigurationResolvedContent = {
 
 export type KioskConfigurationEditorState = KioskConfigurationResolvedContent & {
   configuration: NonNullable<Awaited<ReturnType<typeof getKioskConfigurationById>>>
-  versions: KioskConfigurationContentVersionSummary[]
+  versions: Array<KioskConfigurationContentVersionSummary>
 }
 
 function toContentEditSummary(

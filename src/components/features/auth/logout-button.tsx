@@ -9,7 +9,7 @@ export function LogoutButton() {
 
   async function handleLogout() {
     await logoutFn()
-    await router.invalidate()
+    await router.invalidate({ sync: true })
   }
 
   return (

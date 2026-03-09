@@ -1,6 +1,6 @@
-import { Button } from '@/components/ui/button'
 import { componentTypes } from './kiosk-component-registry'
 import { useKioskEditorContext } from './KioskEditorContext'
+import { Button } from '@/components/ui/button'
 
 export function KioskComponentBank() {
   const editor = useKioskEditorContext()

@@ -1,22 +1,22 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { toast } from 'sonner'
+import { componentRegistry } from './kiosk-component-registry'
 import type {
   KioskConfigurationContent,
   KioskConfigurationContentComponent,
   KioskConfigurationContentPage,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
+import type { KioskConfigurationEditorState } from '@/utils/kiosk-configurations/kiosk-configurations.server'
+import type { ComponentTypeId } from './kiosk-component-registry'
 import {
   createDefaultPage,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
-import type { KioskConfigurationEditorState } from '@/utils/kiosk-configurations/kiosk-configurations.server'
 import {
   appendKioskConfigurationContentEditFn,
-  undoKioskConfigurationContentEditFn,
   saveKioskConfigurationContentVersionFn,
+  undoKioskConfigurationContentEditFn,
 } from '@/utils/kiosk-configurations/kiosk-configurations.functions'
-import { componentRegistry } from './kiosk-component-registry'
-import type { ComponentTypeId } from './kiosk-component-registry'
-import { toast } from 'sonner'
 
 const PERSIST_DEBOUNCE_MS = 400
 
@@ -27,7 +27,7 @@ export type KioskEditorState = {
   saving: boolean
   undoing: boolean
   persisting: boolean
-  redoStack: KioskConfigurationContent[]
+  redoStack: Array<KioskConfigurationContent>
   versionLabel: string
   draftRevision: number | null
 }
@@ -150,7 +150,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   }, [sendPersist])
 
   const flushPersistAndWait = useCallback(async () => {
-    while (true) {
+    for (;;) {
       if (persistTimerRef.current) {
         clearTimeout(persistTimerRef.current)
         persistTimerRef.current = null
@@ -349,7 +349,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   )
 
   const reorderLayers = useCallback(
-    (orderedIds: string[]) => {
+    (orderedIds: Array<string>) => {
       if (orderedIds.length === 0) return
       updatePage(
         (page) => {
@@ -437,28 +437,31 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
 
   const deletePage = useCallback(
     (pageId: string) => {
-      updateContent(
-        (content) => {
-          const filtered = content.pages.filter((p) => p.id !== pageId)
-          if (filtered.length === 0) {
-            filtered.push(createDefaultPage())
-          }
-          return { ...content, pages: filtered }
-        },
-        'delete_page',
-      )
-      setState((s) => ({
-        ...s,
-        selectedPageId:
-          s.selectedPageId === pageId
-            ? s.content.pages.find((p) => p.id !== pageId)?.id ??
-              s.content.pages[0]?.id ??
-              null
-            : s.selectedPageId,
-        selectedComponentId: null,
-      }))
+      setState((s) => {
+        const remainingPages = s.content.pages.filter((p) => p.id !== pageId)
+        const nextPages =
+          remainingPages.length > 0 ? remainingPages : [createDefaultPage()]
+        const nextContent = {
+          ...s.content,
+          pages: nextPages,
+        }
+
+        schedulePersist(nextContent, 'delete_page')
+
+        return {
+          ...s,
+          content: nextContent,
+          selectedPageId:
+            s.selectedPageId !== pageId &&
+            nextPages.some((p) => p.id === s.selectedPageId)
+              ? s.selectedPageId
+              : nextPages[0]?.id ?? null,
+          selectedComponentId: null,
+          redoStack: [],
+        }
+      })
     },
-    [updateContent],
+    [schedulePersist],
   )
 
   const renamePage = useCallback(
@@ -475,9 +478,9 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   )
 
   const undo = useCallback(async () => {
-    cancelPendingPersist()
     setState((s) => ({ ...s, undoing: true }))
     try {
+      await flushPersistAndWait()
       const result = await undoKioskConfigurationContentEditFn({
         data: { id: configuration.id },
       })
@@ -501,7 +504,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       toast.error('Nothing to undo')
       setState((s) => ({ ...s, undoing: false }))
     }
-  }, [configuration.id, cancelPendingPersist])
+  }, [configuration.id, flushPersistAndWait])
 
   const redo = useCallback(() => {
     flushPersist()

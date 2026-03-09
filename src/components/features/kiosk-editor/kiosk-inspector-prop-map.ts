@@ -44,7 +44,7 @@ export type PropMapField =
   | PropMapFieldPageSelect
 
 /** A component's prop map: ordered array of field definitions */
-export type PropMap = PropMapField[]
+export type PropMap = Array<PropMapField>
 
 export function isPropsField(
   field: PropMapField,

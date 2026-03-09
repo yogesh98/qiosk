@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { componentRegistry } from './kiosk-component-registry'
 import type {
   KioskConfigurationContent,
@@ -62,7 +62,7 @@ export function KioskConfigurationViewer({
   const canNavigate = useCallback(
     (comp: KioskConfigurationContentComponent): boolean => {
       if (comp.action?.kind !== 'navigate') return false
-      if (comp.type === 'button' && (comp.props as { disabled?: boolean })?.disabled) {
+      if ((comp.props as { disabled?: boolean }).disabled) {
         return false
       }
       return content.pages.some((p) => p.id === comp.action!.targetPageId)
@@ -92,7 +92,6 @@ export function KioskConfigurationViewer({
         >
           {sorted.map((comp) => {
             const entry = componentRegistry[comp.type as ComponentTypeId]
-            if (!entry) return null
 
             const isClickable = canNavigate(comp)
             const targetPage =

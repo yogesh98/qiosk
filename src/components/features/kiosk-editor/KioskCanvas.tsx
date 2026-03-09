@@ -1,8 +1,8 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useKioskEditorContext } from './KioskEditorContext'
 import { componentRegistry } from './kiosk-component-registry'
 import type { KioskConfigurationContentComponent } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 type InteractionState =
   | { kind: 'idle' }
@@ -87,7 +87,7 @@ export function KioskCanvas() {
         const newX = Math.max(0, Math.min(maxX, interaction.origX + dx))
         const newY = Math.max(0, Math.min(maxY, interaction.origY + dy))
         editor.moveComponentLocal(interaction.componentId, newX, newY)
-      } else if (interaction.kind === 'resizing') {
+      } else {
         editor.resizeComponentLocal(
           interaction.componentId,
           interaction.origW + dx,
@@ -142,9 +142,10 @@ export function KioskCanvas() {
         >
           {sorted.map((comp) => {
             const entry = componentRegistry[comp.type]
-            if (!entry) return null
             const isSelected = comp.id === state.selectedComponentId
-            const displayLabel = entry.getDisplayLabel?.(comp.props as Record<string, unknown> ?? {}) ?? entry.label
+            const displayLabel =
+              entry.getDisplayLabel?.(comp.props as Record<string, unknown>) ??
+              entry.label
 
             return (
               <div

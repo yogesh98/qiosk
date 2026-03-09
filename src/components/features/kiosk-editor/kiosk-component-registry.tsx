@@ -4,12 +4,12 @@ import type {
   KioskConfigurationContentComponent,
   KioskConfigurationContentLayout,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
+import type { PropMap } from '@/components/features/kiosk-editor/kiosk-inspector-prop-map'
 import {
   createDefaultButtonProps,
   generateId,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import { ButtonBlock } from '@/components/features/kiosk-editor/components/ButtonBlock'
-import type { PropMap } from '@/components/features/kiosk-editor/kiosk-inspector-prop-map'
 
 export type ComponentTypeId = 'button'
 

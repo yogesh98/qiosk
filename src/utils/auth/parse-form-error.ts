@@ -17,7 +17,7 @@ export function parseFormError(err: unknown): ParsedError {
 
   try {
     const issues = JSON.parse(err.message) as Array<{
-      path?: string[]
+      path?: Array<string>
       message?: string
     }>
 

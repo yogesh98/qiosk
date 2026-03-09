@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from '@tanstack/react-router'
-import { Route } from '@/routes/_authed/management/users'
-import {
-  listUsersFn,
-  createUserFn,
-  updateUserFn,
-  deleteUserFn,
-} from '@/utils/users/users.functions'
 import { toast } from 'sonner'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -16,6 +9,14 @@ import {
   PencilEdit01Icon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
+import type {
+  listUsersFn} from '@/utils/users/users.functions';
+import {
+  createUserFn,
+  deleteUserFn,
+  updateUserFn,
+} from '@/utils/users/users.functions'
+import { Route } from '@/routes/_authed/management/users'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -85,6 +86,7 @@ function formatDate(date: Date) {
 export function UserManagement() {
   const { users, currentUserId } = Route.useLoaderData()
   const router = useRouter()
+  const refreshUsers = () => router.invalidate({ sync: true })
   const pendingCount = users.filter((u) => !u.isApproved).length
 
   return (
@@ -102,7 +104,7 @@ export function UserManagement() {
             )}
           </p>
         </div>
-        <CreateUserDialog onCreated={() => router.invalidate()} />
+        <CreateUserDialog onCreated={refreshUsers} />
       </div>
 
       <div className="mt-6">
@@ -136,7 +138,7 @@ export function UserManagement() {
                     key={user.id}
                     user={user}
                     currentUserId={currentUserId}
-                    onMutated={() => router.invalidate()}
+                    onMutated={refreshUsers}
                   />
                 ))}
               </TableBody>
@@ -155,7 +157,7 @@ function UserRow({
 }: {
   user: User
   currentUserId: string
-  onMutated: () => void
+  onMutated: () => Promise<void>
 }) {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -213,9 +215,9 @@ function UserRow({
           user={user}
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
-          onSuccess={() => {
+          onSuccess={async () => {
             setEditDialogOpen(false)
-            onMutated()
+            await onMutated()
           }}
         />
 
@@ -240,7 +242,7 @@ function UserRow({
                     await deleteUserFn({ data: { id: user.id } })
                     toast.success(`Deleted ${user.email}`)
                     setDeleteDialogOpen(false)
-                    onMutated()
+                    await onMutated()
                   } catch (err) {
                     toast.error(
                       err instanceof Error
@@ -269,7 +271,7 @@ function EditDialog({
   user: User
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSuccess: () => void
+  onSuccess: () => Promise<void>
 }) {
   const [email, setEmail] = useState(user.email)
   const [role, setRole] = useState<(typeof ROLES)[number]['value']>(
@@ -304,7 +306,7 @@ function EditDialog({
         data: { id: user.id, email, role, isApproved },
       })
       toast.success(`Updated ${email}`)
-      onSuccess()
+      await onSuccess()
       onOpenChange(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -384,7 +386,7 @@ function EditDialog({
   )
 }
 
-function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
+function CreateUserDialog({ onCreated }: { onCreated: () => Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -417,7 +419,7 @@ function CreateUserDialog({ onCreated }: { onCreated: () => void }) {
       toast.success(`Created user ${email}`)
       setOpen(false)
       resetForm()
-      onCreated()
+      await onCreated()
     } catch (err) {
       if (err instanceof Error && err.message.includes('Unique constraint')) {
         setFieldErrors({ email: 'A user with this email already exists' })
@@ -525,7 +527,7 @@ function ApproveMenuItem({
   onSuccess,
 }: {
   user: User
-  onSuccess: () => void
+  onSuccess: () => Promise<void>
 }) {
   const [loading, setLoading] = useState(false)
 
@@ -536,7 +538,7 @@ function ApproveMenuItem({
         data: { id: user.id, isApproved: true },
       })
       toast.success(`Approved ${user.email}`)
-      onSuccess()
+      await onSuccess()
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : 'Failed to approve user',

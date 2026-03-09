@@ -1,5 +1,5 @@
-import { Button } from '@/components/ui/button'
 import type { ButtonProps } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
+import { Button } from '@/components/ui/button'
 
 export function ButtonBlock({
   props,

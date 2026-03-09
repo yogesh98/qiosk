@@ -1,18 +1,18 @@
 import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
-import { useAppSession } from '@/utils/session.server'
+import { requireApprovedUser } from '@/utils/auth/rbac'
 import {
   appendKioskConfigurationContentEdit,
   createKioskConfiguration,
-  getKioskConfigurationEditorState,
-  getKioskConfigurationsByUser,
+  deleteKioskConfiguration,
   getKioskConfigurationById,
+  getKioskConfigurationEditorState,
   getKioskConfigurationViewerState,
+  getKioskConfigurationsByUser,
   listKioskConfigurationContentVersions,
   saveKioskConfigurationContentVersion,
   undoKioskConfigurationContentEdit,
   updateKioskConfigurationName,
-  deleteKioskConfiguration,
 } from '@/utils/kiosk-configurations/kiosk-configurations.server'
 import { kioskConfigurationContentSchema } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 
@@ -39,9 +39,8 @@ const appendContentEditSchema = z.object({
 })
 
 async function requireUserId() {
-  const session = await useAppSession()
-  if (!session.data.userId) throw new Error('Unauthorized')
-  return session.data.userId
+  const user = await requireApprovedUser()
+  return user.id
 }
 
 export const createKioskConfigurationFn = createServerFn({ method: 'POST' })

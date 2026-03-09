@@ -1,23 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  ArrowDown01Icon,
+  ArrowUp01Icon,
+  Delete02Icon,
+} from '@hugeicons/core-free-icons'
+import { useKioskEditorContext } from './KioskEditorContext'
+import {
+  
+  componentRegistry
+} from './kiosk-component-registry'
+import type { KioskEditor } from './use-kiosk-editor'
+import type {ComponentTypeId} from './kiosk-component-registry';
+import type { PropMapField } from './kiosk-inspector-prop-map'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
-import { Field, FieldLabel, FieldGroup } from '@/components/ui/field'
-import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
-import { useKioskEditorContext } from './KioskEditorContext'
-import type { KioskEditor } from './use-kiosk-editor'
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  ArrowUp01Icon,
-  ArrowDown01Icon,
-  Delete02Icon,
-} from '@hugeicons/core-free-icons'
-import {
-  componentRegistry,
-  type ComponentTypeId,
-} from './kiosk-component-registry'
-import type { PropMapField } from './kiosk-inspector-prop-map'
+import { Field, FieldGroup, FieldLabel } from '@/components/ui/field'
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 const DEBOUNCE_MS = 400
 
@@ -41,26 +42,12 @@ export function KioskInspector() {
   }
 
   const entry = componentRegistry[selectedComponent.type as ComponentTypeId]
-  if (!entry?.propMap) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-4">
-        <Empty className="border-none">
-          <EmptyHeader>
-            <EmptyTitle>Unknown component</EmptyTitle>
-            <EmptyDescription>
-              This component type is not recognized
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      </div>
-    )
-  }
 
   return (
     <PropMapInspector
       editor={editor}
       componentId={selectedComponent.id}
-      props={selectedComponent.props ?? {}}
+      props={selectedComponent.props}
       action={selectedComponent.action}
       propMap={entry.propMap}
       pages={state.content.pages}
@@ -82,8 +69,8 @@ function PropMapInspector({
   componentId: string
   props: Record<string, unknown>
   action?: { kind: 'navigate'; targetPageId: string }
-  propMap: PropMapField[]
-  pages: { id: string; name: string }[]
+  propMap: Array<PropMapField>
+  pages: Array<{ id: string; name: string }>
   currentPageId: string
 }) {
   const otherPages = pages.filter((p) => p.id !== currentPageId)
@@ -149,7 +136,7 @@ function PropMapFieldRenderer({
   componentId: string
   props: Record<string, unknown>
   action?: { kind: 'navigate'; targetPageId: string }
-  otherPages: { id: string; name: string }[]
+  otherPages: Array<{ id: string; name: string }>
 }) {
   if (field.inputType === 'input') {
     return (
@@ -157,8 +144,8 @@ function PropMapFieldRenderer({
         field={field}
         editor={editor}
         componentId={componentId}
-        value={(props[field.key] as string) ?? ''}
-        debounce={field.debounce ?? false}
+        value={typeof props[field.key] === 'string' ? (props[field.key] as string) : ''}
+        debounce={field.debounce === true}
       />
     )
   }
@@ -169,7 +156,7 @@ function PropMapFieldRenderer({
         <FieldLabel htmlFor={`field-${field.key}`}>{field.label}</FieldLabel>
         <NativeSelect
           id={`field-${field.key}`}
-          value={(props[field.key] as string) ?? ''}
+          value={typeof props[field.key] === 'string' ? (props[field.key] as string) : ''}
           className="w-full"
           onChange={(e) =>
             editor.updateComponentProps(componentId, {
@@ -194,7 +181,7 @@ function PropMapFieldRenderer({
         <Switch
           id={`field-${field.key}`}
           size="sm"
-          checked={(props[field.key] as boolean) ?? false}
+          checked={props[field.key] === true}
           onCheckedChange={(checked) =>
             editor.updateComponentProps(componentId, { [field.key]: checked })
           }
@@ -203,38 +190,34 @@ function PropMapFieldRenderer({
     )
   }
 
-  if (field.inputType === 'pageSelect') {
-    return (
-      <Field>
-        <FieldLabel htmlFor={`field-${field.key}`}>{field.label}</FieldLabel>
-        <NativeSelect
-          id={`field-${field.key}`}
-          value={action?.targetPageId ?? ''}
-          className="w-full"
-          onChange={(e) => {
-            const val = e.target.value
-            if (val) {
-              editor.updateComponentAction(componentId, {
-                kind: 'navigate',
-                targetPageId: val,
-              })
-            } else {
-              editor.updateComponentAction(componentId, undefined)
-            }
-          }}
-        >
-          <NativeSelectOption value="">None</NativeSelectOption>
-          {otherPages.map((p) => (
-            <NativeSelectOption key={p.id} value={p.id}>
-              {p.name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-      </Field>
-    )
-  }
-
-  return null
+  return (
+    <Field>
+      <FieldLabel htmlFor={`field-${field.key}`}>{field.label}</FieldLabel>
+      <NativeSelect
+        id={`field-${field.key}`}
+        value={action?.targetPageId ?? ''}
+        className="w-full"
+        onChange={(e) => {
+          const val = e.target.value
+          if (val) {
+            editor.updateComponentAction(componentId, {
+              kind: 'navigate',
+              targetPageId: val,
+            })
+          } else {
+            editor.updateComponentAction(componentId, undefined)
+          }
+        }}
+      >
+        <NativeSelectOption value="">None</NativeSelectOption>
+        {otherPages.map((p) => (
+          <NativeSelectOption key={p.id} value={p.id}>
+            {p.name}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+    </Field>
+  )
 }
 
 function DebouncedInputField({

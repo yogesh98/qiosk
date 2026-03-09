@@ -1,4 +1,15 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import {
+  Add01Icon,
+  ArrowLeft02Icon,
+  ArrowRight01Icon,
+  ArrowTurnBackwardIcon,
+  ArrowTurnForwardIcon,
+  Delete02Icon,
+  Tick02Icon,
+} from '@hugeicons/core-free-icons'
+import { Link } from '@tanstack/react-router'
 import { Route } from '@/routes/_authed/editor.$kioskId'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -6,14 +17,14 @@ import { Spinner } from '@/components/ui/spinner'
 import { Separator } from '@/components/ui/separator'
 import {
   Tooltip,
-  TooltipTrigger,
   TooltipContent,
   TooltipProvider,
+  TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
   Popover,
-  PopoverTrigger,
   PopoverContent,
+  PopoverTrigger,
 } from '@/components/ui/popover'
 import { useKioskEditor } from '@/components/features/kiosk-editor/use-kiosk-editor'
 import { KioskEditorProvider, useKioskEditorContext } from '@/components/features/kiosk-editor/KioskEditorContext'
@@ -21,17 +32,6 @@ import { KioskCanvas } from '@/components/features/kiosk-editor/KioskCanvas'
 import { KioskComponentBank } from '@/components/features/kiosk-editor/KioskComponentBank'
 import { KioskLayerList } from '@/components/features/kiosk-editor/KioskLayerList'
 import { KioskInspector } from '@/components/features/kiosk-editor/KioskInspector'
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Add01Icon,
-  Delete02Icon,
-  ArrowLeft02Icon,
-  ArrowTurnBackwardIcon,
-  ArrowTurnForwardIcon,
-  Tick02Icon,
-  ArrowRight01Icon,
-} from '@hugeicons/core-free-icons'
-import { Link } from '@tanstack/react-router'
 
 export function ConfigurationEditor() {
   const { editorState } = Route.useLoaderData()

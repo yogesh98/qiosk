@@ -2,10 +2,11 @@ import { createServerFn } from '@tanstack/react-start'
 import { z } from 'zod'
 import { requireRole } from '@/utils/auth/rbac'
 import {
-  listUsers,
+  countApprovedAdmins,
   createUserAsAdmin,
-  updateUser,
   deleteUser,
+  listUsers,
+  updateUser,
 } from '@/utils/users/users.server'
 
 const createSchema = z.object({
@@ -42,8 +43,41 @@ export const createUserFn = createServerFn({ method: 'POST' })
 export const updateUserFn = createServerFn({ method: 'POST' })
   .inputValidator(updateSchema)
   .handler(async ({ data }) => {
-    await requireRole('admin')
+    const admin = await requireRole('admin')
     const { id, ...updates } = data
+
+    if (id === admin.id) {
+      if (updates.role && updates.role !== 'admin') {
+        throw new Error('You cannot change your own role away from admin')
+      }
+
+      if (updates.isApproved === false) {
+        throw new Error('You cannot remove your own approval')
+      }
+    }
+
+    const currentUser = listUsers().then((users) => users.find((user) => user.id === id))
+    const approvedAdminCount = countApprovedAdmins()
+    const [existingUser, currentApprovedAdminCount] = await Promise.all([
+      currentUser,
+      approvedAdminCount,
+    ])
+
+    if (!existingUser) {
+      throw new Error('User not found')
+    }
+
+    const nextRole = updates.role ?? existingUser.role
+    const nextIsApproved = updates.isApproved ?? existingUser.isApproved
+    const removesApprovedAdmin =
+      existingUser.role === 'admin' &&
+      existingUser.isApproved &&
+      (nextRole !== 'admin' || nextIsApproved === false)
+
+    if (removesApprovedAdmin && currentApprovedAdminCount <= 1) {
+      throw new Error('At least one approved admin must remain')
+    }
+
     return updateUser(id, updates)
   })
 
@@ -54,5 +88,19 @@ export const deleteUserFn = createServerFn({ method: 'POST' })
     if (data.id === admin.id) {
       throw new Error('You cannot delete your own account')
     }
+
+    const users = await listUsers()
+    const existingUser = users.find((user) => user.id === data.id)
+    if (!existingUser) {
+      throw new Error('User not found')
+    }
+
+    if (existingUser.role === 'admin' && existingUser.isApproved) {
+      const approvedAdminCount = await countApprovedAdmins()
+      if (approvedAdminCount <= 1) {
+        throw new Error('At least one approved admin must remain')
+      }
+    }
+
     await deleteUser(data.id)
   })

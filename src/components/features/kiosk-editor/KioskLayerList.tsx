@@ -1,12 +1,12 @@
-import { useState, useCallback, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { useKioskEditorContext } from './KioskEditorContext'
+import { useCallback, useEffect, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Delete02Icon, DragDropVerticalIcon } from '@hugeicons/core-free-icons'
+import { useKioskEditorContext } from './KioskEditorContext'
 import { componentRegistry } from './kiosk-component-registry'
+import { Button } from '@/components/ui/button'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
-function arrayMove<T>(arr: T[], from: number, to: number): T[] {
+function arrayMove<T>(arr: Array<T>, from: number, to: number): Array<T> {
   const result = [...arr]
   const [removed] = result.splice(from, 1)
   result.splice(to, 0, removed)
@@ -86,7 +86,9 @@ export function KioskLayerList() {
         const isSelected = comp.id === state.selectedComponentId
         const isDragging = comp.id === draggingId
         const showDropAbove = dropIndex === i && !isDragging
-        const label = entry?.getDisplayLabel?.(comp.props as Record<string, unknown> ?? {}) ?? entry?.label ?? comp.type
+        const label =
+          entry.getDisplayLabel?.(comp.props as Record<string, unknown>) ??
+          entry.label
 
         return (
           <div

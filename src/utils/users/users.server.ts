@@ -42,3 +42,12 @@ export async function deleteUser(id: string) {
     where: { id },
   })
 }
+
+export async function countApprovedAdmins() {
+  return prisma.user.count({
+    where: {
+      role: 'admin',
+      isApproved: true,
+    },
+  })
+}
