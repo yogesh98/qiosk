@@ -1,23 +1,25 @@
 import { useState } from 'react'
-import { useRouter } from '@tanstack/react-router'
-import { Route } from '@/routes/_authed/management/configurations'
-import {
-  createKioskConfigurationFn,
-  listKioskConfigurationsFn,
-  updateKioskConfigurationNameFn,
-  deleteKioskConfigurationFn,
-} from '@/utils/kiosk-configurations/kiosk-configurations.functions'
+import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Add01Icon,
-  Delete02Icon,
-  PencilEdit01Icon,
-  ComputerIcon,
-  Tick02Icon,
+  ArrowRight01Icon,
   Cancel01Icon,
+  ComputerIcon,
+  Delete02Icon,
   MoreVerticalIcon,
+  PencilEdit01Icon,
+  Tick02Icon,
 } from '@hugeicons/core-free-icons'
+import type {
+  listKioskConfigurationsFn} from '@/utils/kiosk-configurations/kiosk-configurations.functions';
+import {
+  createKioskConfigurationFn,
+  deleteKioskConfigurationFn,
+  updateKioskConfigurationNameFn,
+} from '@/utils/kiosk-configurations/kiosk-configurations.functions'
+import { Route } from '@/routes/_authed/management/configurations'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
@@ -69,6 +71,7 @@ const RESOLUTION_PRESETS = [
 export function KioskConfigurations() {
   const configurations = Route.useLoaderData()
   const router = useRouter()
+  const refreshConfigurations = () => router.invalidate({ sync: true })
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-24">
@@ -79,7 +82,7 @@ export function KioskConfigurations() {
             Manage your kiosk display configurations
           </p>
         </div>
-        <CreateDialog onCreated={() => router.invalidate()} />
+        <CreateDialog onCreated={refreshConfigurations} />
       </div>
 
       <div className="mt-6">
@@ -101,7 +104,7 @@ export function KioskConfigurations() {
               <ConfigurationRow
                 key={config.id}
                 config={config}
-                onMutated={() => router.invalidate()}
+                onMutated={refreshConfigurations}
               />
             ))}
           </div>
@@ -116,8 +119,9 @@ function ConfigurationRow({
   onMutated,
 }: {
   config: KioskConfig
-  onMutated: () => void
+  onMutated: () => Promise<void>
 }) {
+  const navigate = useNavigate()
   const [editing, setEditing] = useState(false)
   const [editName, setEditName] = useState(config.name)
   const [saving, setSaving] = useState(false)
@@ -137,7 +141,7 @@ function ConfigurationRow({
         data: { id: config.id, name: trimmed },
       })
       toast.success('Configuration renamed')
-      onMutated()
+      await onMutated()
       setEditing(false)
     } catch {
       toast.error('Failed to rename configuration')
@@ -152,7 +156,7 @@ function ConfigurationRow({
     try {
       await deleteKioskConfigurationFn({ data: { id: config.id } })
       toast.success(`Deleted "${config.name}"`)
-      onMutated()
+      await onMutated()
     } catch {
       toast.error('Failed to delete configuration')
     } finally {
@@ -207,11 +211,19 @@ function ConfigurationRow({
             </Button>
           </div>
         ) : (
-          <p className="truncate text-sm font-medium">{config.name}</p>
+          <Link
+            to="/editor/$kioskId"
+            params={{ kioskId: config.id }}
+            className="block focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md -m-1 p-1"
+          >
+            <p className="truncate text-sm font-medium hover:underline">
+              {config.name}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {config.width} × {config.height}
+            </p>
+          </Link>
         )}
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {config.width} × {config.height}
-        </p>
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -224,6 +236,22 @@ function ConfigurationRow({
             <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() =>
+                navigate({ to: '/editor/$kioskId', params: { kioskId: config.id } })
+              }
+            >
+              <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
+              Open in Editor
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                navigate({ to: '/viewer/$configId', params: { configId: config.id } })
+              }
+            >
+              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
+              Preview
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {
                 setEditName(config.name)
@@ -267,7 +295,7 @@ function ConfigurationRow({
   )
 }
 
-function CreateDialog({ onCreated }: { onCreated: () => void }) {
+function CreateDialog({ onCreated }: { onCreated: () => Promise<void> }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [width, setWidth] = useState('')
@@ -329,7 +357,7 @@ function CreateDialog({ onCreated }: { onCreated: () => void }) {
       toast.success(`Created "${name.trim()}"`)
       setOpen(false)
       resetForm()
-      onCreated()
+      await onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       toast.error('Failed to create configuration')

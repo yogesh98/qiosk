@@ -13,9 +13,12 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ViewerConfigIdRouteImport } from './routes/viewer.$configId'
 import { Route as AuthedManagementRouteImport } from './routes/_authed/management'
+import { Route as ViewerConfigIdPageIdRouteImport } from './routes/viewer.$configId.$pageId'
 import { Route as AuthedManagementUsersRouteImport } from './routes/_authed/management/users'
 import { Route as AuthedManagementConfigurationsRouteImport } from './routes/_authed/management/configurations'
+import { Route as AuthedEditorKioskIdRouteImport } from './routes/_authed/editor.$kioskId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -36,10 +39,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ViewerConfigIdRoute = ViewerConfigIdRouteImport.update({
+  id: '/viewer/$configId',
+  path: '/viewer/$configId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedManagementRoute = AuthedManagementRouteImport.update({
   id: '/management',
   path: '/management',
   getParentRoute: () => AuthedRoute,
+} as any)
+const ViewerConfigIdPageIdRoute = ViewerConfigIdPageIdRouteImport.update({
+  id: '/$pageId',
+  path: '/$pageId',
+  getParentRoute: () => ViewerConfigIdRoute,
 } as any)
 const AuthedManagementUsersRoute = AuthedManagementUsersRouteImport.update({
   id: '/users',
@@ -52,22 +65,33 @@ const AuthedManagementConfigurationsRoute =
     path: '/configurations',
     getParentRoute: () => AuthedManagementRoute,
   } as any)
+const AuthedEditorKioskIdRoute = AuthedEditorKioskIdRouteImport.update({
+  id: '/editor/$kioskId',
+  path: '/editor/$kioskId',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/management': typeof AuthedManagementRouteWithChildren
+  '/viewer/$configId': typeof ViewerConfigIdRouteWithChildren
+  '/editor/$kioskId': typeof AuthedEditorKioskIdRoute
   '/management/configurations': typeof AuthedManagementConfigurationsRoute
   '/management/users': typeof AuthedManagementUsersRoute
+  '/viewer/$configId/$pageId': typeof ViewerConfigIdPageIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/management': typeof AuthedManagementRouteWithChildren
+  '/viewer/$configId': typeof ViewerConfigIdRouteWithChildren
+  '/editor/$kioskId': typeof AuthedEditorKioskIdRoute
   '/management/configurations': typeof AuthedManagementConfigurationsRoute
   '/management/users': typeof AuthedManagementUsersRoute
+  '/viewer/$configId/$pageId': typeof ViewerConfigIdPageIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -76,8 +100,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_authed/management': typeof AuthedManagementRouteWithChildren
+  '/viewer/$configId': typeof ViewerConfigIdRouteWithChildren
+  '/_authed/editor/$kioskId': typeof AuthedEditorKioskIdRoute
   '/_authed/management/configurations': typeof AuthedManagementConfigurationsRoute
   '/_authed/management/users': typeof AuthedManagementUsersRoute
+  '/viewer/$configId/$pageId': typeof ViewerConfigIdPageIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -86,16 +113,22 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/management'
+    | '/viewer/$configId'
+    | '/editor/$kioskId'
     | '/management/configurations'
     | '/management/users'
+    | '/viewer/$configId/$pageId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/signup'
     | '/management'
+    | '/viewer/$configId'
+    | '/editor/$kioskId'
     | '/management/configurations'
     | '/management/users'
+    | '/viewer/$configId/$pageId'
   id:
     | '__root__'
     | '/'
@@ -103,8 +136,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/_authed/management'
+    | '/viewer/$configId'
+    | '/_authed/editor/$kioskId'
     | '/_authed/management/configurations'
     | '/_authed/management/users'
+    | '/viewer/$configId/$pageId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -112,6 +148,7 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  ViewerConfigIdRoute: typeof ViewerConfigIdRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -144,12 +181,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/viewer/$configId': {
+      id: '/viewer/$configId'
+      path: '/viewer/$configId'
+      fullPath: '/viewer/$configId'
+      preLoaderRoute: typeof ViewerConfigIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed/management': {
       id: '/_authed/management'
       path: '/management'
       fullPath: '/management'
       preLoaderRoute: typeof AuthedManagementRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/viewer/$configId/$pageId': {
+      id: '/viewer/$configId/$pageId'
+      path: '/$pageId'
+      fullPath: '/viewer/$configId/$pageId'
+      preLoaderRoute: typeof ViewerConfigIdPageIdRouteImport
+      parentRoute: typeof ViewerConfigIdRoute
     }
     '/_authed/management/users': {
       id: '/_authed/management/users'
@@ -164,6 +215,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/management/configurations'
       preLoaderRoute: typeof AuthedManagementConfigurationsRouteImport
       parentRoute: typeof AuthedManagementRoute
+    }
+    '/_authed/editor/$kioskId': {
+      id: '/_authed/editor/$kioskId'
+      path: '/editor/$kioskId'
+      fullPath: '/editor/$kioskId'
+      preLoaderRoute: typeof AuthedEditorKioskIdRouteImport
+      parentRoute: typeof AuthedRoute
     }
   }
 }
@@ -183,20 +241,35 @@ const AuthedManagementRouteWithChildren =
 
 interface AuthedRouteChildren {
   AuthedManagementRoute: typeof AuthedManagementRouteWithChildren
+  AuthedEditorKioskIdRoute: typeof AuthedEditorKioskIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedManagementRoute: AuthedManagementRouteWithChildren,
+  AuthedEditorKioskIdRoute: AuthedEditorKioskIdRoute,
 }
 
 const AuthedRouteWithChildren =
   AuthedRoute._addFileChildren(AuthedRouteChildren)
+
+interface ViewerConfigIdRouteChildren {
+  ViewerConfigIdPageIdRoute: typeof ViewerConfigIdPageIdRoute
+}
+
+const ViewerConfigIdRouteChildren: ViewerConfigIdRouteChildren = {
+  ViewerConfigIdPageIdRoute: ViewerConfigIdPageIdRoute,
+}
+
+const ViewerConfigIdRouteWithChildren = ViewerConfigIdRoute._addFileChildren(
+  ViewerConfigIdRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRoute: AuthedRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  ViewerConfigIdRoute: ViewerConfigIdRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

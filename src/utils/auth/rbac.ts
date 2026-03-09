@@ -16,12 +16,17 @@ export function hasRoleAtLeast(userRole: string, required: Role): boolean {
   return userRank >= requiredRank
 }
 
-export async function requireRole(required: Role) {
+export async function requireApprovedUser() {
   const session = await useAppSession()
   const userId = session.data.userId
   if (!userId) throw new Error('Unauthorized')
   const user = await getUserById(userId)
   if (!user?.isApproved) throw new Error('Unauthorized')
+  return user
+}
+
+export async function requireRole(required: Role) {
+  const user = await requireApprovedUser()
   if (!hasRoleAtLeast(user.role, required)) throw new Error('Forbidden')
   return user
 }

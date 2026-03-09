@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 import { signupFn } from '@/utils/auth/auth.functions'
 import { parseFormError } from '@/utils/auth/parse-form-error'
 import { IconThemeToggle } from '@/components/features/theme-toggle/icon-theme-toggle'
@@ -15,8 +17,6 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { CheckmarkCircle02Icon } from '@hugeicons/core-free-icons'
 
 export function SignupPage() {
   const [email, setEmail] = useState('')
