@@ -455,7 +455,7 @@ function ConfigurationRow({
 
         {!editing && (
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon-sm"
             aria-label="Open in editor"
             onClick={() => onEdit(isSelected ? selectedSourceVersionId : undefined)}
@@ -538,7 +538,7 @@ function ConfigurationRow({
       </div>
 
       {isSelected && versionPicker ? (
-        <div className="mt-3 border-t border-border/60 pt-3">
+        <div className="mt-2">
           {versionPicker}
         </div>
       ) : null}
@@ -560,7 +560,7 @@ function SelectedConfigurationVersionPicker({
   onSelectedVersionChange: (value: string) => void
 }) {
   return (
-    <div className="rounded-md bg-background/70 p-1">
+    <div className="rounded-md">
       {loading ? (
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
           <Spinner className="size-3" />
