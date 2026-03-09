@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useRouter } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -216,22 +216,13 @@ function ConfigurationRow({
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onSelect()
-        }
-      }}
-      className={`flex cursor-pointer items-center gap-3 rounded-lg px-4 py-3 ring-1 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+      className={`flex items-center gap-2 rounded-lg px-4 py-3 ring-1 transition-colors ${
         isSelected
           ? 'bg-primary/10 ring-primary/30 dark:bg-primary/15'
-          : 'bg-card ring-foreground/10 hover:bg-muted/50'
+          : 'bg-card ring-foreground/10'
       }`}
     >
-      <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
+      <div className="min-w-0 flex-1">
         {editing ? (
           <div className="flex items-center gap-1.5">
             <Input
@@ -265,20 +256,33 @@ function ConfigurationRow({
             </Button>
           </div>
         ) : (
-          <Link
-            to="/editor/$kioskId"
-            params={{ kioskId: config.id }}
-            className="block focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md -m-1 p-1"
+          <button
+            type="button"
+            onClick={onSelect}
+            className="w-full rounded-md text-left focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 -m-1 p-1 hover:underline"
           >
-            <p className="truncate text-sm font-medium hover:underline">
+            <p className="truncate text-sm font-medium">
               {config.name}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {config.width} × {config.height}
             </p>
-          </Link>
+          </button>
         )}
       </div>
+
+      {!editing && (
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label="Open in editor"
+          onClick={() =>
+            navigate({ to: '/editor/$kioskId', params: { kioskId: config.id } })
+          }
+        >
+          <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
+        </Button>
+      )}
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DropdownMenu>
@@ -288,7 +292,6 @@ function ConfigurationRow({
                 variant="ghost"
                 size="icon-sm"
                 aria-label="Actions"
-                onClick={(e) => e.stopPropagation()}
               />
             }
           >
