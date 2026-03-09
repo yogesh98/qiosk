@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Route } from '@/routes/_authed/editor.$kioskId'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,8 +15,8 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from '@/components/ui/popover'
-import type { KioskConfigurationEditorState } from '@/utils/kiosk-configurations/kiosk-configurations.server'
 import { useKioskEditor } from '@/components/features/kiosk-editor/use-kiosk-editor'
+import { KioskEditorProvider, useKioskEditorContext } from '@/components/features/kiosk-editor/KioskEditorContext'
 import { KioskCanvas } from '@/components/features/kiosk-editor/KioskCanvas'
 import { KioskComponentBank } from '@/components/features/kiosk-editor/KioskComponentBank'
 import { KioskLayerList } from '@/components/features/kiosk-editor/KioskLayerList'
@@ -34,25 +34,65 @@ import { Link } from '@tanstack/react-router'
 
 export function ConfigurationEditor() {
   const { editorState } = Route.useLoaderData()
-  const editor = useKioskEditor(editorState as KioskConfigurationEditorState)
+  const editor = useKioskEditor(editorState)
 
   return (
     <TooltipProvider>
-      <div className="flex h-svh flex-col bg-background">
-        <Header editor={editor} />
-        <div className="flex min-h-0 flex-1">
-          <LeftSidebar editor={editor} />
-          <main className="relative min-w-0 flex-1 overflow-hidden bg-muted/40">
-            <KioskCanvas editor={editor} />
-          </main>
-          <RightSidebar editor={editor} />
-        </div>
-      </div>
+      <KioskEditorProvider editor={editor}>
+        <EditorShell />
+      </KioskEditorProvider>
     </TooltipProvider>
   )
 }
 
-function Header({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
+function isEditableElement(el: Element | null): boolean {
+  if (!el) return false
+  const tag = el.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return (el as HTMLElement).isContentEditable
+}
+
+function EditorShell() {
+  const editor = useKioskEditorContext()
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (isEditableElement(document.activeElement)) return
+
+      if (e.key === 'Escape') {
+        editor.selectComponent(null)
+        return
+      }
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && editor.state.selectedComponentId) {
+        e.preventDefault()
+        editor.deleteComponent(editor.state.selectedComponentId)
+      }
+    },
+    [editor],
+  )
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  return (
+    <div className="flex h-svh flex-col bg-background">
+      <Header />
+      <div className="flex min-h-0 flex-1">
+        <LeftSidebar />
+        <main className="relative min-w-0 flex-1 overflow-hidden bg-muted/40">
+          <KioskCanvas />
+        </main>
+        <RightSidebar />
+      </div>
+    </div>
+  )
+}
+
+function Header() {
+  const editor = useKioskEditorContext()
   const { state, configuration } = editor
 
   return (
@@ -87,7 +127,7 @@ function Header({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
       </div>
 
       {/* Center: page tabs */}
-      <PageTabs editor={editor} />
+      <PageTabs />
 
       {/* Right: actions */}
       <div className="ml-auto flex items-center gap-1 border-l border-border px-3 py-2">
@@ -145,13 +185,12 @@ function PageTab({
   page,
   isActive,
   canDelete,
-  editor,
 }: {
   page: { id: string; name: string }
   isActive: boolean
   canDelete: boolean
-  editor: ReturnType<typeof useKioskEditor>
 }) {
+  const editor = useKioskEditorContext()
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState(page.name)
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -232,7 +271,8 @@ function PageTab({
   )
 }
 
-function PageTabs({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
+function PageTabs() {
+  const editor = useKioskEditorContext()
   const { state } = editor
   const [addOpen, setAddOpen] = useState(false)
   const [newPageName, setNewPageName] = useState('')
@@ -260,7 +300,6 @@ function PageTabs({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
           page={page}
           isActive={page.id === state.selectedPageId}
           canDelete={state.content.pages.length > 1}
-          editor={editor}
         />
       ))}
 
@@ -307,33 +346,33 @@ function PageTabs({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
   )
 }
 
-function LeftSidebar({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
+function LeftSidebar() {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-background">
       <section className="flex flex-col gap-2 border-b border-border p-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Components
         </h2>
-        <KioskComponentBank editor={editor} />
+        <KioskComponentBank />
       </section>
       <section className="flex flex-1 flex-col gap-2 overflow-auto p-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Layers
         </h2>
-        <KioskLayerList editor={editor} />
+        <KioskLayerList />
       </section>
     </aside>
   )
 }
 
-function RightSidebar({ editor }: { editor: ReturnType<typeof useKioskEditor> }) {
+function RightSidebar() {
   return (
     <aside className="flex w-60 shrink-0 flex-col border-l border-border bg-background">
       <section className="flex flex-1 flex-col overflow-auto border-b border-border">
         <h2 className="p-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Properties
         </h2>
-        <KioskInspector editor={editor} />
+        <KioskInspector />
       </section>
       <section className="flex flex-col gap-2 p-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

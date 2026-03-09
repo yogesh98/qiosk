@@ -18,6 +18,8 @@ export type ComponentRegistryEntry = {
   label: string
   createDefault: (canvasW: number, canvasH: number) => KioskConfigurationContentComponent
   render: (props: Record<string, unknown>, selected: boolean) => ReactNode
+  /** Returns a display label for the component instance (used in layer list) */
+  getDisplayLabel?: (props: Record<string, unknown>) => string
   /** Defines the inspector form fields for this component */
   propMap: PropMap
 }
@@ -45,6 +47,7 @@ export const componentRegistry: Record<ComponentTypeId, ComponentRegistryEntry> 
     render: (props, selected) => (
       <ButtonBlock props={props as ButtonProps} selected={selected} />
     ),
+    getDisplayLabel: (props) => (props.text as string) || 'Button',
     propMap: [
       {
         key: 'text',

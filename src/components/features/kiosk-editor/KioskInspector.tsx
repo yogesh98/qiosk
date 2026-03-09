@@ -4,6 +4,8 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Switch } from '@/components/ui/switch'
 import { Field, FieldLabel, FieldGroup } from '@/components/ui/field'
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
+import { useKioskEditorContext } from './KioskEditorContext'
 import type { KioskEditor } from './use-kiosk-editor'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
@@ -19,13 +21,21 @@ import type { PropMapField } from './kiosk-inspector-prop-map'
 
 const DEBOUNCE_MS = 400
 
-export function KioskInspector({ editor }: { editor: KioskEditor }) {
+export function KioskInspector() {
+  const editor = useKioskEditorContext()
   const { selectedComponent, state, currentPage } = editor
 
   if (!selectedComponent) {
     return (
       <div className="flex flex-1 items-center justify-center p-4">
-        <p className="text-xs text-muted-foreground">Select a component</p>
+        <Empty className="border-none">
+          <EmptyHeader>
+            <EmptyTitle>No selection</EmptyTitle>
+            <EmptyDescription>
+              Select a component on the canvas to edit its properties
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </div>
     )
   }
@@ -33,8 +43,15 @@ export function KioskInspector({ editor }: { editor: KioskEditor }) {
   const entry = componentRegistry[selectedComponent.type as ComponentTypeId]
   if (!entry?.propMap) {
     return (
-      <div className="p-4 text-xs text-muted-foreground">
-        Unknown component type
+      <div className="flex flex-1 items-center justify-center p-4">
+        <Empty className="border-none">
+          <EmptyHeader>
+            <EmptyTitle>Unknown component</EmptyTitle>
+            <EmptyDescription>
+              This component type is not recognized
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </div>
     )
   }
@@ -79,7 +96,7 @@ function PropMapInspector({
           variant="ghost"
           size="icon-xs"
           onClick={() => editor.bringForward(componentId)}
-          title="Bring forward"
+          aria-label="Bring forward"
         >
           <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} />
         </Button>
@@ -87,7 +104,7 @@ function PropMapInspector({
           variant="ghost"
           size="icon-xs"
           onClick={() => editor.sendBackward(componentId)}
-          title="Send backward"
+          aria-label="Send backward"
         >
           <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} />
         </Button>
@@ -96,7 +113,7 @@ function PropMapInspector({
           variant="ghost"
           size="icon-xs"
           onClick={() => editor.deleteComponent(componentId)}
-          title="Delete"
+          aria-label="Delete component"
         >
           <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
         </Button>
@@ -280,6 +297,16 @@ function DebouncedInputField({
     }
   }
 
+  const handleBlur = () => {
+    if (debounce) {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current)
+        debounceRef.current = null
+      }
+      flush()
+    }
+  }
+
   return (
     <Field>
       <FieldLabel htmlFor={`field-${field.key}`}>{field.label}</FieldLabel>
@@ -289,6 +316,7 @@ function DebouncedInputField({
         placeholder={field.componentProps?.placeholder}
         type={field.componentProps?.type ?? 'text'}
         onChange={handleChange}
+        onBlur={handleBlur}
       />
     </Field>
   )

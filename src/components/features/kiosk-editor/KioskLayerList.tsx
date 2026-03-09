@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import type { KioskEditor } from './use-kiosk-editor'
+import { useKioskEditorContext } from './KioskEditorContext'
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Delete02Icon, DragDropVerticalIcon } from '@hugeicons/core-free-icons'
 import { componentRegistry } from './kiosk-component-registry'
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 
 function arrayMove<T>(arr: T[], from: number, to: number): T[] {
   const result = [...arr]
@@ -12,7 +13,8 @@ function arrayMove<T>(arr: T[], from: number, to: number): T[] {
   return result
 }
 
-export function KioskLayerList({ editor }: { editor: KioskEditor }) {
+export function KioskLayerList() {
+  const editor = useKioskEditorContext()
   const { currentPage, state } = editor
   const components = currentPage?.components ?? []
   const sorted = [...components].sort((a, b) => b.layout.zIndex - a.layout.zIndex)
@@ -69,9 +71,11 @@ export function KioskLayerList({ editor }: { editor: KioskEditor }) {
 
   if (sorted.length === 0) {
     return (
-      <p className="py-4 text-center text-xs text-muted-foreground">
-        No layers yet
-      </p>
+      <Empty className="border-none py-8">
+        <EmptyHeader>
+          <EmptyTitle>No layers yet</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     )
   }
 
@@ -82,10 +86,7 @@ export function KioskLayerList({ editor }: { editor: KioskEditor }) {
         const isSelected = comp.id === state.selectedComponentId
         const isDragging = comp.id === draggingId
         const showDropAbove = dropIndex === i && !isDragging
-        const label =
-          comp.type === 'button'
-            ? (comp.props as { text?: string }).text || 'Button'
-            : entry?.label ?? comp.type
+        const label = entry?.getDisplayLabel?.(comp.props as Record<string, unknown> ?? {}) ?? entry?.label ?? comp.type
 
         return (
           <div
@@ -99,16 +100,20 @@ export function KioskLayerList({ editor }: { editor: KioskEditor }) {
             <div
               role="button"
               tabIndex={0}
-              aria-label={`Drag to reorder ${label}`}
+              aria-label={`Reorder ${label}. Use arrow keys to move.`}
               className={`flex shrink-0 cursor-grab touch-none p-1 rounded text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring ${
                 isDragging ? 'cursor-grabbing opacity-50' : ''
               }`}
               onPointerDown={(e) => handleHandlePointerDown(e, comp.id)}
               onKeyDown={(e) => {
-                if (e.key === ' ' || e.key === 'Enter') {
+                if (e.key === 'ArrowUp' && i > 0) {
                   e.preventDefault()
-                  setDraggingId(comp.id)
-                  setDropIndex(i)
+                  const ids = sorted.map((c) => c.id)
+                  editor.reorderLayers(arrayMove(ids, i, i - 1))
+                } else if (e.key === 'ArrowDown' && i < sorted.length - 1) {
+                  e.preventDefault()
+                  const ids = sorted.map((c) => c.id)
+                  editor.reorderLayers(arrayMove(ids, i, i + 1))
                 }
               }}
             >
@@ -129,6 +134,7 @@ export function KioskLayerList({ editor }: { editor: KioskEditor }) {
               <Button
                 variant="ghost"
                 size="icon-xs"
+                aria-label={`Delete ${label}`}
                 className="opacity-0 group-hover:opacity-100 shrink-0"
                 onClick={(e) => {
                   e.stopPropagation()

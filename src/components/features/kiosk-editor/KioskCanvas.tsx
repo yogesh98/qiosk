@@ -1,7 +1,8 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
-import type { KioskEditor } from './use-kiosk-editor'
+import { useKioskEditorContext } from './KioskEditorContext'
 import { componentRegistry } from './kiosk-component-registry'
 import type { KioskConfigurationContentComponent } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/ui/empty'
 
 type InteractionState =
   | { kind: 'idle' }
@@ -10,7 +11,8 @@ type InteractionState =
 
 const DRAG_THRESHOLD = 3
 
-export function KioskCanvas({ editor }: { editor: KioskEditor }) {
+export function KioskCanvas() {
+  const editor = useKioskEditorContext()
   const { configuration, currentPage, state } = editor
   const containerRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(1)
@@ -138,6 +140,7 @@ export function KioskCanvas({ editor }: { editor: KioskEditor }) {
             const entry = componentRegistry[comp.type]
             if (!entry) return null
             const isSelected = comp.id === state.selectedComponentId
+            const displayLabel = entry.getDisplayLabel?.(comp.props as Record<string, unknown> ?? {}) ?? entry.label
 
             return (
               <div
@@ -152,6 +155,9 @@ export function KioskCanvas({ editor }: { editor: KioskEditor }) {
                 }}
               >
                 <div
+                  role="button"
+                  aria-label={`${entry.label}: ${displayLabel}`}
+                  aria-selected={isSelected}
                   className={`h-full w-full cursor-move ${isSelected ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-1 hover:ring-muted-foreground/30'}`}
                   onPointerDown={(e) => handlePointerDown(e, comp, 'drag')}
                 >
@@ -159,9 +165,13 @@ export function KioskCanvas({ editor }: { editor: KioskEditor }) {
                 </div>
                 {isSelected && (
                   <div
-                    className="absolute -bottom-1.5 -right-1.5 h-3 w-3 cursor-se-resize rounded-sm border border-primary bg-background"
+                    role="button"
+                    aria-label="Resize component"
+                    className="absolute -bottom-2 -right-2 flex h-5 w-5 cursor-se-resize items-center justify-center"
                     onPointerDown={(e) => handlePointerDown(e, comp, 'resize')}
-                  />
+                  >
+                    <div className="h-2.5 w-2.5 rounded-sm border border-primary bg-background" />
+                  </div>
                 )}
               </div>
             )
@@ -169,9 +179,14 @@ export function KioskCanvas({ editor }: { editor: KioskEditor }) {
 
           {components.length === 0 && (
             <div className="flex h-full w-full items-center justify-center pointer-events-none">
-              <p className="text-sm text-muted-foreground">
-                Add components from the bank
-              </p>
+              <Empty className="border-none">
+                <EmptyHeader>
+                  <EmptyTitle>No components</EmptyTitle>
+                  <EmptyDescription>
+                    Add components from the bank on the left
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             </div>
           )}
         </div>

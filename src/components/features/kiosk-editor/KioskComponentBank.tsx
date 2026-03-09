@@ -1,8 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { componentTypes } from './kiosk-component-registry'
-import type { KioskEditor } from './use-kiosk-editor'
+import { useKioskEditorContext } from './KioskEditorContext'
 
-export function KioskComponentBank({ editor }: { editor: KioskEditor }) {
+export function KioskComponentBank() {
+  const editor = useKioskEditorContext()
+
   return (
     <div className="flex flex-col gap-1.5">
       {componentTypes.map((entry) => (

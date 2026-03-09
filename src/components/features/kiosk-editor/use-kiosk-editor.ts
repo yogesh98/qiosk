@@ -3,11 +3,9 @@ import type {
   KioskConfigurationContent,
   KioskConfigurationContentComponent,
   KioskConfigurationContentPage,
-  ButtonProps,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import {
   createDefaultPage,
-  generateId,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import type { KioskConfigurationEditorState } from '@/utils/kiosk-configurations/kiosk-configurations.server'
 import {
@@ -62,6 +60,10 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   })
 
   const persistingRef = useRef(false)
+  const selectedPageIdRef = useRef(state.selectedPageId)
+  selectedPageIdRef.current = state.selectedPageId
+  const pendingPersistRef = useRef<{ content: KioskConfigurationContent; changeType: string } | null>(null)
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const currentPage = state.content.pages.find(
     (p) => p.id === state.selectedPageId,
@@ -71,7 +73,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     (c) => c.id === state.selectedComponentId,
   )
 
-  const persistEdit = useCallback(
+  const sendPersist = useCallback(
     async (content: KioskConfigurationContent, changeType: string) => {
       if (persistingRef.current) return
       persistingRef.current = true
@@ -91,10 +93,45 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
         setState((s) => ({ ...s, persisting: false }))
       } finally {
         persistingRef.current = false
+        if (pendingPersistRef.current) {
+          const { content: next, changeType: ct } = pendingPersistRef.current
+          pendingPersistRef.current = null
+          sendPersist(next, ct)
+        }
       }
     },
     [configuration.id],
   )
+
+  const PERSIST_DEBOUNCE_MS = 400
+
+  const schedulePersist = useCallback(
+    (content: KioskConfigurationContent, changeType: string) => {
+      pendingPersistRef.current = { content, changeType }
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = setTimeout(() => {
+        persistTimerRef.current = null
+        const pending = pendingPersistRef.current
+        if (pending) {
+          pendingPersistRef.current = null
+          sendPersist(pending.content, pending.changeType)
+        }
+      }, PERSIST_DEBOUNCE_MS)
+    },
+    [sendPersist],
+  )
+
+  const flushPersist = useCallback(() => {
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = null
+    }
+    const pending = pendingPersistRef.current
+    if (pending) {
+      pendingPersistRef.current = null
+      sendPersist(pending.content, pending.changeType)
+    }
+  }, [sendPersist])
 
   const updateContent = useCallback(
     (
@@ -103,11 +140,11 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     ) => {
       setState((s) => {
         const next = updater(s.content)
-        persistEdit(next, changeType)
+        schedulePersist(next, changeType)
         return { ...s, content: next, redoStack: [] }
       })
     },
-    [persistEdit],
+    [schedulePersist],
   )
 
   const updatePage = useCallback(
@@ -115,17 +152,18 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       updater: (page: KioskConfigurationContentPage) => KioskConfigurationContentPage,
       changeType: string,
     ) => {
+      const pageId = selectedPageIdRef.current
       updateContent(
         (content) => ({
           ...content,
           pages: content.pages.map((p) =>
-            p.id === state.selectedPageId ? updater(p) : p,
+            p.id === pageId ? updater(p) : p,
           ),
         }),
         changeType,
       )
     },
-    [updateContent, state.selectedPageId],
+    [updateContent],
   )
 
   const addComponent = useCallback(
@@ -152,7 +190,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   }, [])
 
   const updateComponentProps = useCallback(
-    (componentId: string, props: Partial<ButtonProps>) => {
+    (componentId: string, props: Record<string, unknown>) => {
       updatePage(
         (page) => ({
           ...page,
@@ -205,12 +243,13 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
 
   const persistCurrentContent = useCallback(
     (changeType: string) => {
+      flushPersist()
       setState((s) => {
-        persistEdit(s.content, changeType)
+        sendPersist(s.content, changeType)
         return { ...s, redoStack: [] }
       })
     },
-    [persistEdit],
+    [flushPersist, sendPersist],
   )
 
   const moveComponentLocal = useCallback(
@@ -421,11 +460,12 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   }, [configuration.id])
 
   const redo = useCallback(() => {
+    flushPersist()
     setState((s) => {
       if (s.redoStack.length === 0) return s
       const [next, ...rest] = s.redoStack
       const withPage = ensureAtLeastOnePage(next)
-      persistEdit(withPage.content, 'redo')
+      sendPersist(withPage.content, 'redo')
       return {
         ...s,
         content: withPage.content,
@@ -434,7 +474,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
         redoStack: rest,
       }
     })
-  }, [persistEdit])
+  }, [flushPersist, sendPersist])
 
   const save = useCallback(async () => {
     setState((s) => ({ ...s, saving: true }))
