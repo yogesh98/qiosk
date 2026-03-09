@@ -6,7 +6,7 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/u
 
 type InteractionState =
   | { kind: 'idle' }
-  | { kind: 'dragging'; componentId: string; startX: number; startY: number; origX: number; origY: number; moved: boolean }
+  | { kind: 'dragging'; componentId: string; startX: number; startY: number; origX: number; origY: number; moved: boolean; w: number; h: number }
   | { kind: 'resizing'; componentId: string; startX: number; startY: number; origW: number; origH: number; moved: boolean }
 
 const DRAG_THRESHOLD = 3
@@ -49,6 +49,8 @@ export function KioskCanvas() {
           origX: comp.layout.x,
           origY: comp.layout.y,
           moved: false,
+          w: comp.layout.w,
+          h: comp.layout.h,
         }
       } else {
         interactionRef.current = {
@@ -80,8 +82,10 @@ export function KioskCanvas() {
       interaction.moved = true
 
       if (interaction.kind === 'dragging') {
-        const newX = Math.max(0, Math.min(configuration.width, interaction.origX + dx))
-        const newY = Math.max(0, Math.min(configuration.height, interaction.origY + dy))
+        const maxX = Math.max(0, configuration.width - interaction.w)
+        const maxY = Math.max(0, configuration.height - interaction.h)
+        const newX = Math.max(0, Math.min(maxX, interaction.origX + dx))
+        const newY = Math.max(0, Math.min(maxY, interaction.origY + dy))
         editor.moveComponentLocal(interaction.componentId, newX, newY)
       } else if (interaction.kind === 'resizing') {
         editor.resizeComponentLocal(
@@ -156,6 +160,7 @@ export function KioskCanvas() {
               >
                 <div
                   role="button"
+                  tabIndex={0}
                   aria-label={`${entry.label}: ${displayLabel}`}
                   aria-selected={isSelected}
                   className={`h-full w-full cursor-move ${isSelected ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-1 hover:ring-muted-foreground/30'}`}
@@ -166,6 +171,7 @@ export function KioskCanvas() {
                 {isSelected && (
                   <div
                     role="button"
+                    tabIndex={0}
                     aria-label="Resize component"
                     className="absolute -bottom-2 -right-2 flex h-5 w-5 cursor-se-resize items-center justify-center"
                     onPointerDown={(e) => handlePointerDown(e, comp, 'resize')}

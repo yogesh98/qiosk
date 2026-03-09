@@ -7,6 +7,7 @@ import {
   getKioskConfigurationEditorState,
   getKioskConfigurationsByUser,
   getKioskConfigurationById,
+  getKioskConfigurationViewerState,
   listKioskConfigurationContentVersions,
   saveKioskConfigurationContentVersion,
   undoKioskConfigurationContentEdit,
@@ -138,4 +139,12 @@ export const deleteKioskConfigurationFn = createServerFn({ method: 'POST' })
     const existing = await getKioskConfigurationById(data.id, userId)
     if (!existing) throw new Error('Configuration not found')
     await deleteKioskConfiguration(data.id, userId)
+  })
+
+export const getKioskConfigurationViewerStateFn = createServerFn({ method: 'GET' })
+  .inputValidator(byIdSchema)
+  .handler(async ({ data }) => {
+    const state = await getKioskConfigurationViewerState(data.id)
+    if (!state) throw new Error('Configuration not found')
+    return state
   })

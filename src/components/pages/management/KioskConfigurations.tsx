@@ -239,8 +239,16 @@ function ConfigurationRow({
                 navigate({ to: '/editor/$kioskId', params: { kioskId: config.id } })
               }
             >
-              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
+              <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
               Open in Editor
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                navigate({ to: '/viewer/$configId', params: { configId: config.id } })
+              }
+            >
+              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
+              Preview
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => {

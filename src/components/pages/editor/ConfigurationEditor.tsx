@@ -29,6 +29,7 @@ import {
   ArrowTurnBackwardIcon,
   ArrowTurnForwardIcon,
   Tick02Icon,
+  ArrowRight01Icon,
 } from '@hugeicons/core-free-icons'
 import { Link } from '@tanstack/react-router'
 
@@ -94,6 +95,7 @@ function EditorShell() {
 function Header() {
   const editor = useKioskEditorContext()
   const { state, configuration } = editor
+  const viewerPageId = state.selectedPageId ?? state.content.pages[0]?.id
 
   return (
     <header className="flex shrink-0 items-center border-b border-border bg-background">
@@ -131,6 +133,29 @@ function Header() {
 
       {/* Right: actions */}
       <div className="ml-auto flex items-center gap-1 border-l border-border px-3 py-2">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Link
+                to={viewerPageId ? '/viewer/$configId/$pageId' : '/viewer/$configId'}
+                params={
+                  viewerPageId
+                    ? { configId: configuration.id, pageId: viewerPageId }
+                    : { configId: configuration.id }
+                }
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="ghost" size="icon-sm">
+                  <HugeiconsIcon icon={ArrowRight01Icon} className="size-3.5" strokeWidth={2} />
+                </Button>
+              </Link>
+            }
+          >
+            <TooltipContent side="bottom">Open preview in new window</TooltipContent>
+          </TooltipTrigger>
+        </Tooltip>
+        <Separator orientation="vertical" className="mx-1 !h-4" />
         <Tooltip>
           <TooltipTrigger
             render={

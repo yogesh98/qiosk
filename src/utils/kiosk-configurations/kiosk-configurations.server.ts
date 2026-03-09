@@ -289,6 +289,49 @@ export async function undoKioskConfigurationContentEdit(
   })
 }
 
+export async function getKioskConfigurationByIdPublic(id: string) {
+  return prisma.kioskConfiguration.findFirst({ where: { id } })
+}
+
+export async function resolveKioskConfigurationContentPublic(
+  kioskConfigurationId: string,
+): Promise<KioskConfigurationResolvedContent> {
+  const [latestEdit, latestVersion] = await Promise.all([
+    prisma.kioskConfigurationContentEdit.findFirst({
+      where: { kioskConfigurationId },
+      orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
+    }),
+    prisma.kioskConfigurationContentVersion.findFirst({
+      where: { kioskConfigurationId },
+      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+    }),
+  ])
+
+  return {
+    currentContent: resolveCurrentContentFromRecords(latestEdit, latestVersion),
+    latestEdit: toContentEditSummary(latestEdit),
+    latestVersion: toContentVersionSummary(latestVersion),
+  }
+}
+
+export type KioskConfigurationViewerState = {
+  configuration: NonNullable<Awaited<ReturnType<typeof getKioskConfigurationByIdPublic>>>
+  currentContent: KioskConfigurationContent
+}
+
+export async function getKioskConfigurationViewerState(
+  kioskConfigurationId: string,
+): Promise<KioskConfigurationViewerState | null> {
+  const configuration = await getKioskConfigurationByIdPublic(kioskConfigurationId)
+  if (!configuration) return null
+
+  const resolved = await resolveKioskConfigurationContentPublic(kioskConfigurationId)
+  return {
+    configuration,
+    currentContent: resolved.currentContent,
+  }
+}
+
 export async function saveKioskConfigurationContentVersion(
   kioskConfigurationId: string,
   userId: string,

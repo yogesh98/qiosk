@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import type {
   KioskConfigurationContent,
   KioskConfigurationContentComponent,
@@ -16,6 +16,8 @@ import {
 import { componentRegistry } from './kiosk-component-registry'
 import type { ComponentTypeId } from './kiosk-component-registry'
 import { toast } from 'sonner'
+
+const PERSIST_DEBOUNCE_MS = 400
 
 export type KioskEditorState = {
   content: KioskConfigurationContent
@@ -65,17 +67,22 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   const pendingPersistRef = useRef<{ content: KioskConfigurationContent; changeType: string } | null>(null)
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const currentPage = state.content.pages.find(
-    (p) => p.id === state.selectedPageId,
+  const currentPage = useMemo(
+    () => state.content.pages.find((p) => p.id === state.selectedPageId),
+    [state.content.pages, state.selectedPageId],
   )
 
-  const selectedComponent = currentPage?.components.find(
-    (c) => c.id === state.selectedComponentId,
+  const selectedComponent = useMemo(
+    () => currentPage?.components.find((c) => c.id === state.selectedComponentId),
+    [currentPage?.components, state.selectedComponentId],
   )
 
   const sendPersist = useCallback(
     async (content: KioskConfigurationContent, changeType: string) => {
-      if (persistingRef.current) return
+      if (persistingRef.current) {
+        pendingPersistRef.current = { content, changeType }
+        return
+      }
       persistingRef.current = true
       setState((s) => ({ ...s, persisting: true }))
       try {
@@ -103,7 +110,13 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     [configuration.id],
   )
 
-  const PERSIST_DEBOUNCE_MS = 400
+  const cancelPendingPersist = useCallback(() => {
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current)
+      persistTimerRef.current = null
+    }
+    pendingPersistRef.current = null
+  }, [])
 
   const schedulePersist = useCallback(
     (content: KioskConfigurationContent, changeType: string) => {
@@ -133,15 +146,38 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     }
   }, [sendPersist])
 
+  const flushPersistAndWait = useCallback(async () => {
+    while (true) {
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current)
+        persistTimerRef.current = null
+      }
+
+      if (persistingRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 25))
+        continue
+      }
+
+      const pending = pendingPersistRef.current
+      if (pending) {
+        pendingPersistRef.current = null
+        await sendPersist(pending.content, pending.changeType)
+        continue
+      }
+
+      break
+    }
+  }, [sendPersist])
+
   const updateContent = useCallback(
     (
       updater: (content: KioskConfigurationContent) => KioskConfigurationContent,
       changeType: string,
     ) => {
       setState((s) => {
-        const next = updater(s.content)
-        schedulePersist(next, changeType)
-        return { ...s, content: next, redoStack: [] }
+        const nextContent = updater(s.content)
+        schedulePersist(nextContent, changeType)
+        return { ...s, content: nextContent, redoStack: [] }
       })
     },
     [schedulePersist],
@@ -432,6 +468,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   )
 
   const undo = useCallback(async () => {
+    cancelPendingPersist()
     setState((s) => ({ ...s, undoing: true }))
     try {
       const result = await undoKioskConfigurationContentEditFn({
@@ -457,7 +494,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       toast.error('Nothing to undo')
       setState((s) => ({ ...s, undoing: false }))
     }
-  }, [configuration.id])
+  }, [configuration.id, cancelPendingPersist])
 
   const redo = useCallback(() => {
     flushPersist()
@@ -479,6 +516,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   const save = useCallback(async () => {
     setState((s) => ({ ...s, saving: true }))
     try {
+      await flushPersistAndWait()
       const result = await saveKioskConfigurationContentVersionFn({
         data: { id: configuration.id },
       })
@@ -497,7 +535,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       toast.error('Failed to save version')
       setState((s) => ({ ...s, saving: false }))
     }
-  }, [configuration.id])
+  }, [configuration.id, flushPersistAndWait])
 
   return {
     state,
