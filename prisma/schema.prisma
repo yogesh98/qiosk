@@ -19,56 +19,54 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  kioskConfigurations           KioskConfiguration[]
-  kioskConfigurationContentEdits    KioskConfigurationContentEdit[]
-  kioskConfigurationContentVersions KioskConfigurationContentVersion[]
+  kioskConfigurations KioskConfiguration[]
+  kioskConfigurationLogs KioskConfigurationLog[]
+  kioskConfigurationVersions KioskConfigurationVersion[]
 }
 
 model KioskConfiguration {
-  id        String   @id @default(cuid())
-  name      String
-  width     Int      // immutable after creation
-  height    Int      // immutable after creation
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  width            Int      // immutable after creation
+  height           Int      // immutable after creation
+  currentVersionId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   createdBy   User   @relation(fields: [createdById], references: [id])
   createdById String
 
-  contentEdits    KioskConfigurationContentEdit[]
-  contentVersions KioskConfigurationContentVersion[]
+  currentVersion KioskConfigurationVersion? @relation("KioskConfigurationCurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  logs KioskConfigurationLog[]
+  versions KioskConfigurationVersion[] @relation("KioskConfigurationVersions")
 }
 
-model KioskConfigurationContentEdit {
-  id                   String   @id @default(cuid())
-  revision             Int
-  changeType           String
-  content              String
-  createdAt            DateTime @default(now())
-  kioskConfigurationId String
-  baseVersionId        String?
-  createdById          String
-
-  kioskConfiguration KioskConfiguration @relation(fields: [kioskConfigurationId], references: [id], onDelete: Cascade)
-  baseVersion        KioskConfigurationContentVersion? @relation("KioskConfigurationBaseVersionEdits", fields: [baseVersionId], references: [id], onDelete: SetNull)
-  createdBy          User @relation(fields: [createdById], references: [id], onDelete: Cascade)
-
-  @@unique([kioskConfigurationId, revision])
-  @@index([kioskConfigurationId, createdAt])
-}
-
-model KioskConfigurationContentVersion {
+model KioskConfigurationVersion {
   id                   String   @id @default(cuid())
   version              Int
   content              String
   createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  kioskConfigurationId String
+  createdById          String
+
+  kioskConfiguration KioskConfiguration @relation("KioskConfigurationVersions", fields: [kioskConfigurationId], references: [id], onDelete: Cascade)
+  createdBy          User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  currentForConfigurations KioskConfiguration[] @relation("KioskConfigurationCurrentVersion")
+
+  @@unique([kioskConfigurationId, version])
+  @@index([kioskConfigurationId, createdAt])
+}
+
+model KioskConfigurationLog {
+  id                   String   @id @default(cuid())
+  message              String
+  createdAt            DateTime @default(now())
   kioskConfigurationId String
   createdById          String
 
   kioskConfiguration KioskConfiguration @relation(fields: [kioskConfigurationId], references: [id], onDelete: Cascade)
   createdBy          User @relation(fields: [createdById], references: [id], onDelete: Cascade)
-  baseVersionForEdits KioskConfigurationContentEdit[] @relation("KioskConfigurationBaseVersionEdits")
 
-  @@unique([kioskConfigurationId, version])
   @@index([kioskConfigurationId, createdAt])
 }

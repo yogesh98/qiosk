@@ -1,82 +1,62 @@
-import type {KioskConfigurationContent} from '@/utils/kiosk-configurations/kiosk-configuration-content.schema';
+import type { Prisma } from '@/generated/prisma/client'
+import type { KioskConfigurationContent } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import { prisma } from '@/utils/db.server'
 import {
-  
-  createEmptyKioskConfigurationContent,
   parseKioskConfigurationContent,
-  serializeKioskConfigurationContent
+  serializeKioskConfigurationContent,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 
-type ContentEditRecord = {
+type ConfigurationRecord = Awaited<
+  ReturnType<typeof getKioskConfigurationById>
+>
+
+export type KioskConfigurationLogSummary = {
   id: string
-  revision: number
-  changeType: string
-  baseVersionId: string | null
+  message: string
   createdAt: Date
   createdById: string
-  content: string
 }
 
-type ContentVersionRecord = {
+export type KioskConfigurationVersionSummary = {
   id: string
   version: number
   createdAt: Date
-  createdById: string
-  content: string
+  updatedAt: Date
 }
 
-export type KioskConfigurationContentEditSummary = Omit<
-  ContentEditRecord,
-  'content'
->
-
-export type KioskConfigurationContentVersionSummary = Omit<
-  ContentVersionRecord,
-  'content'
->
-
-export type KioskConfigurationResolvedContent = {
+export type KioskConfigurationEditorState = {
+  configuration: NonNullable<ConfigurationRecord>
   currentContent: KioskConfigurationContent
-  latestEdit: KioskConfigurationContentEditSummary | null
-  latestVersion: KioskConfigurationContentVersionSummary | null
+  currentVersion: KioskConfigurationVersionSummary | null
+  versions: Array<KioskConfigurationVersionSummary>
+  recentLogs: Array<KioskConfigurationLogSummary>
 }
 
-export type KioskConfigurationEditorState = KioskConfigurationResolvedContent & {
-  configuration: NonNullable<Awaited<ReturnType<typeof getKioskConfigurationById>>>
-  versions: Array<KioskConfigurationContentVersionSummary>
-}
+const DEFAULT_LOG_LIMIT = 20
 
-function toContentEditSummary(
-  edit: ContentEditRecord | null,
-): KioskConfigurationContentEditSummary | null {
-  if (!edit) return null
-
-  const { content: _content, ...summary } = edit
-  return summary
-}
-
-function toContentVersionSummary(
-  version: ContentVersionRecord | null,
-): KioskConfigurationContentVersionSummary | null {
+function toVersionSummary(
+  version:
+    | {
+        id: string
+        version: number
+        createdAt: Date
+        updatedAt: Date
+      }
+    | null
+    | undefined,
+): KioskConfigurationVersionSummary | null {
   if (!version) return null
 
-  const { content: _content, ...summary } = version
-  return summary
+  return {
+    id: version.id,
+    version: version.version,
+    createdAt: version.createdAt,
+    updatedAt: version.updatedAt,
+  }
 }
 
-function resolveCurrentContentFromRecords(
-  latestEdit: ContentEditRecord | null,
-  latestVersion: ContentVersionRecord | null,
-) {
-  if (latestEdit) {
-    return parseKioskConfigurationContent(latestEdit.content)
-  }
-
-  if (latestVersion) {
-    return parseKioskConfigurationContent(latestVersion.content)
-  }
-
-  return createEmptyKioskConfigurationContent()
+function createLogMessage(message: string) {
+  return message.trim() || 'Updated configuration'
 }
 
 export async function createKioskConfiguration(
@@ -86,7 +66,15 @@ export async function createKioskConfiguration(
   createdById: string,
 ) {
   return prisma.kioskConfiguration.create({
-    data: { name, width, height, createdById },
+    data: {
+      name,
+      width,
+      height,
+      createdById,
+    },
+    include: {
+      currentVersion: true,
+    },
   })
 }
 
@@ -94,12 +82,18 @@ export async function getKioskConfigurationsByUser(userId: string) {
   return prisma.kioskConfiguration.findMany({
     where: { createdById: userId },
     orderBy: { createdAt: 'desc' },
+    include: {
+      currentVersion: true,
+    },
   })
 }
 
 export async function getKioskConfigurationById(id: string, userId: string) {
   return prisma.kioskConfiguration.findFirst({
     where: { id, createdById: userId },
+    include: {
+      currentVersion: true,
+    },
   })
 }
 
@@ -120,11 +114,26 @@ export async function deleteKioskConfiguration(id: string, userId: string) {
   })
 }
 
-export async function listKioskConfigurationContentVersions(
+export async function listKioskConfigurationLogs(
+  kioskConfigurationId: string,
+  userId: string,
+  limit: number = DEFAULT_LOG_LIMIT,
+) {
+  return prisma.kioskConfigurationLog.findMany({
+    where: {
+      kioskConfigurationId,
+      kioskConfiguration: { createdById: userId },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  })
+}
+
+export async function listKioskConfigurationVersions(
   kioskConfigurationId: string,
   userId: string,
 ) {
-  const versions = await prisma.kioskConfigurationContentVersion.findMany({
+  const versions = await prisma.kioskConfigurationVersion.findMany({
     where: {
       kioskConfigurationId,
       kioskConfiguration: { createdById: userId },
@@ -132,35 +141,7 @@ export async function listKioskConfigurationContentVersions(
     orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
   })
 
-  return versions.map((version) => toContentVersionSummary(version)!)
-}
-
-export async function resolveKioskConfigurationContent(
-  kioskConfigurationId: string,
-  userId: string,
-): Promise<KioskConfigurationResolvedContent> {
-  const [latestEdit, latestVersion] = await Promise.all([
-    prisma.kioskConfigurationContentEdit.findFirst({
-      where: {
-        kioskConfigurationId,
-        kioskConfiguration: { createdById: userId },
-      },
-      orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
-    }),
-    prisma.kioskConfigurationContentVersion.findFirst({
-      where: {
-        kioskConfigurationId,
-        kioskConfiguration: { createdById: userId },
-      },
-      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-    }),
-  ])
-
-  return {
-    currentContent: resolveCurrentContentFromRecords(latestEdit, latestVersion),
-    latestEdit: toContentEditSummary(latestEdit),
-    latestVersion: toContentVersionSummary(latestVersion),
-  }
+  return versions.map((version) => toVersionSummary(version)!)
 }
 
 export async function getKioskConfigurationEditorState(
@@ -168,155 +149,180 @@ export async function getKioskConfigurationEditorState(
   userId: string,
 ): Promise<KioskConfigurationEditorState | null> {
   const configuration = await getKioskConfigurationById(kioskConfigurationId, userId)
-
   if (!configuration) return null
 
-  const [resolvedContent, versions] = await Promise.all([
-    resolveKioskConfigurationContent(kioskConfigurationId, userId),
-    listKioskConfigurationContentVersions(kioskConfigurationId, userId),
+  const [recentLogs, versions] = await Promise.all([
+    listKioskConfigurationLogs(kioskConfigurationId, userId),
+    listKioskConfigurationVersions(kioskConfigurationId, userId),
   ])
 
   return {
     configuration,
-    ...resolvedContent,
+    currentContent: parseKioskConfigurationContent(
+      configuration.currentVersion?.content,
+    ),
+    currentVersion: toVersionSummary(configuration.currentVersion),
     versions,
+    recentLogs,
   }
 }
 
-export async function appendKioskConfigurationContentEdit(
+async function createOrUpdateCurrentVersion(
+  tx: Prisma.TransactionClient,
   kioskConfigurationId: string,
-  changeType: string,
+  content: string,
+  userId: string,
+) {
+  const configuration = await tx.kioskConfiguration.findFirst({
+    where: { id: kioskConfigurationId, createdById: userId },
+    include: {
+      currentVersion: true,
+    },
+  })
+
+  if (!configuration) {
+    throw new Error('Configuration not found')
+  }
+
+  if (configuration.currentVersion) {
+    const version = await tx.kioskConfigurationVersion.update({
+      where: { id: configuration.currentVersion.id },
+      data: { content },
+    })
+
+    return {
+      configurationVersion: version,
+      createdNewVersion: false,
+    }
+  }
+
+  const latestVersion = await tx.kioskConfigurationVersion.findFirst({
+    where: { kioskConfigurationId },
+    orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+  })
+
+  const version = await tx.kioskConfigurationVersion.create({
+    data: {
+      kioskConfigurationId,
+      version: (latestVersion?.version ?? 0) + 1,
+      content,
+      createdById: userId,
+    },
+  })
+
+  await tx.kioskConfiguration.update({
+    where: { id: kioskConfigurationId },
+    data: {
+      currentVersionId: version.id,
+    },
+  })
+
+  return {
+    configurationVersion: version,
+    createdNewVersion: true,
+  }
+}
+
+export async function saveKioskConfiguration(
+  kioskConfigurationId: string,
   content: KioskConfigurationContent,
   userId: string,
-  baseVersionId?: string,
 ) {
   const serializedContent = serializeKioskConfigurationContent(content)
 
   return prisma.$transaction(async (tx) => {
-    const [latestEdit, latestVersion] = await Promise.all([
-      tx.kioskConfigurationContentEdit.findFirst({
-        where: {
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-        orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
-      }),
-      tx.kioskConfigurationContentVersion.findFirst({
-        where: {
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-        orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-      }),
-    ])
+    const { configurationVersion, createdNewVersion } =
+      await createOrUpdateCurrentVersion(
+        tx,
+        kioskConfigurationId,
+        serializedContent,
+        userId,
+      )
 
-    if (baseVersionId) {
-      const baseVersion = await tx.kioskConfigurationContentVersion.findFirst({
-        where: {
-          id: baseVersionId,
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-      })
-
-      if (!baseVersion) {
-        throw new Error('Base version not found')
-      }
-    }
-
-    const createdEdit = await tx.kioskConfigurationContentEdit.create({
+    const latestLog = await tx.kioskConfigurationLog.create({
       data: {
         kioskConfigurationId,
-        revision: (latestEdit?.revision ?? 0) + 1,
-        changeType,
-        content: serializedContent,
-        baseVersionId: baseVersionId ?? latestVersion?.id ?? null,
+        message: createdNewVersion
+          ? `Created version ${configurationVersion.version}`
+          : `Saved version ${configurationVersion.version}`,
         createdById: userId,
       },
     })
 
     return {
-      currentContent: parseKioskConfigurationContent(createdEdit.content),
-      latestEdit: toContentEditSummary(createdEdit),
-      latestVersion: toContentVersionSummary(latestVersion),
+      currentContent: content,
+      currentVersion: toVersionSummary(configurationVersion),
+      latestLog,
     }
   })
 }
 
-export async function undoKioskConfigurationContentEdit(
+export async function saveKioskConfigurationAsNewVersion(
   kioskConfigurationId: string,
+  content: KioskConfigurationContent,
   userId: string,
 ) {
+  const serializedContent = serializeKioskConfigurationContent(content)
+
   return prisma.$transaction(async (tx) => {
-    const latestEdit = await tx.kioskConfigurationContentEdit.findFirst({
-      where: {
-        kioskConfigurationId,
-        kioskConfiguration: { createdById: userId },
-      },
-      orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
+    const configuration = await tx.kioskConfiguration.findFirst({
+      where: { id: kioskConfigurationId, createdById: userId },
     })
 
-    if (!latestEdit) {
-      throw new Error('Nothing to undo')
+    if (!configuration) {
+      throw new Error('Configuration not found')
     }
 
-    await tx.kioskConfigurationContentEdit.delete({
-      where: { id: latestEdit.id },
+    const latestVersion = await tx.kioskConfigurationVersion.findFirst({
+      where: { kioskConfigurationId },
+      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
     })
 
-    const [previousEdit, latestVersion] = await Promise.all([
-      tx.kioskConfigurationContentEdit.findFirst({
-        where: {
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-        orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
-      }),
-      tx.kioskConfigurationContentVersion.findFirst({
-        where: {
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-        orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-      }),
-    ])
+    const createdVersion = await tx.kioskConfigurationVersion.create({
+      data: {
+        kioskConfigurationId,
+        version: (latestVersion?.version ?? 0) + 1,
+        content: serializedContent,
+        createdById: userId,
+      },
+    })
+
+    await tx.kioskConfiguration.update({
+      where: { id: kioskConfigurationId },
+      data: {
+        currentVersionId: createdVersion.id,
+      },
+    })
+
+    const latestLog = await tx.kioskConfigurationLog.create({
+      data: {
+        kioskConfigurationId,
+        message: createLogMessage(`Created version ${createdVersion.version}`),
+        createdById: userId,
+      },
+    })
 
     return {
-      removedEdit: toContentEditSummary(latestEdit),
-      currentContent: resolveCurrentContentFromRecords(previousEdit, latestVersion),
-      latestEdit: toContentEditSummary(previousEdit),
-      latestVersion: toContentVersionSummary(latestVersion),
+      currentContent: content,
+      currentVersion: toVersionSummary(createdVersion),
+      latestLog,
     }
   })
 }
 
 export async function getKioskConfigurationByIdPublic(id: string) {
-  return prisma.kioskConfiguration.findFirst({ where: { id } })
-}
-
-export async function resolveKioskConfigurationContentPublic(
-  kioskConfigurationId: string,
-): Promise<KioskConfigurationResolvedContent> {
-  const [latestEdit, latestVersion] = await Promise.all([
-    prisma.kioskConfigurationContentEdit.findFirst({
-      where: { kioskConfigurationId },
-      orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
-    }),
-    prisma.kioskConfigurationContentVersion.findFirst({
-      where: { kioskConfigurationId },
-      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-    }),
-  ])
-
-  return {
-    currentContent: resolveCurrentContentFromRecords(latestEdit, latestVersion),
-    latestEdit: toContentEditSummary(latestEdit),
-    latestVersion: toContentVersionSummary(latestVersion),
-  }
+  return prisma.kioskConfiguration.findFirst({
+    where: { id },
+    include: {
+      currentVersion: true,
+    },
+  })
 }
 
 export type KioskConfigurationViewerState = {
-  configuration: NonNullable<Awaited<ReturnType<typeof getKioskConfigurationByIdPublic>>>
+  configuration: NonNullable<
+    Awaited<ReturnType<typeof getKioskConfigurationByIdPublic>>
+  >
   currentContent: KioskConfigurationContent
 }
 
@@ -326,50 +332,10 @@ export async function getKioskConfigurationViewerState(
   const configuration = await getKioskConfigurationByIdPublic(kioskConfigurationId)
   if (!configuration) return null
 
-  const resolved = await resolveKioskConfigurationContentPublic(kioskConfigurationId)
   return {
     configuration,
-    currentContent: resolved.currentContent,
+    currentContent: parseKioskConfigurationContent(
+      configuration.currentVersion?.content,
+    ),
   }
-}
-
-export async function saveKioskConfigurationContentVersion(
-  kioskConfigurationId: string,
-  userId: string,
-) {
-  return prisma.$transaction(async (tx) => {
-    const [latestEdit, latestVersion] = await Promise.all([
-      tx.kioskConfigurationContentEdit.findFirst({
-        where: {
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-        orderBy: [{ revision: 'desc' }, { createdAt: 'desc' }],
-      }),
-      tx.kioskConfigurationContentVersion.findFirst({
-        where: {
-          kioskConfigurationId,
-          kioskConfiguration: { createdById: userId },
-        },
-        orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
-      }),
-    ])
-
-    const currentContent = resolveCurrentContentFromRecords(latestEdit, latestVersion)
-
-    const createdVersion = await tx.kioskConfigurationContentVersion.create({
-      data: {
-        kioskConfigurationId,
-        version: (latestVersion?.version ?? 0) + 1,
-        content: serializeKioskConfigurationContent(currentContent),
-        createdById: userId,
-      },
-    })
-
-    return {
-      currentContent,
-      latestEdit: toContentEditSummary(latestEdit),
-      latestVersion: toContentVersionSummary(createdVersion),
-    }
-  })
 }

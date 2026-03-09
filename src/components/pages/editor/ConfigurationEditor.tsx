@@ -96,10 +96,16 @@ function Header() {
   const editor = useKioskEditorContext()
   const { state, configuration } = editor
   const viewerPageId = state.selectedPageId ?? state.content.pages[0]?.id
+  const versionLabel =
+    state.currentVersionNumber === null ? 'Draft' : `v${state.currentVersionNumber}`
+  const saveLabel = state.persisting
+    ? 'Saving'
+    : state.hasUnsavedChanges
+      ? 'Unsaved'
+      : 'Saved'
 
   return (
     <header className="flex shrink-0 items-center border-b border-border bg-background">
-      {/* Left: navigation + config info */}
       <div className="flex items-center gap-2 border-r border-border px-3 py-2">
         <Tooltip>
           <TooltipTrigger
@@ -117,21 +123,17 @@ function Header() {
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold">{configuration.name}</span>
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {state.versionLabel}
+            {versionLabel}
           </span>
-          {state.draftRevision !== null && (
-            <span className="text-[10px] text-muted-foreground">
-              rev {state.draftRevision}
-            </span>
-          )}
+          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {saveLabel}
+          </span>
           {state.persisting && <Spinner className="size-3" />}
         </div>
       </div>
 
-      {/* Center: page tabs */}
       <PageTabs />
 
-      {/* Right: actions */}
       <div className="ml-auto flex items-center gap-1 border-l border-border px-3 py-2">
         <Tooltip>
           <TooltipTrigger
@@ -163,15 +165,11 @@ function Header() {
                 variant="ghost"
                 size="icon-sm"
                 onClick={editor.undo}
-                disabled={state.undoing}
+                disabled={state.undoStack.length === 0}
               />
             }
           >
-            {state.undoing ? (
-              <Spinner className="size-3.5" />
-            ) : (
-              <HugeiconsIcon icon={ArrowTurnBackwardIcon} className="size-3.5" strokeWidth={2} />
-            )}
+            <HugeiconsIcon icon={ArrowTurnBackwardIcon} className="size-3.5" strokeWidth={2} />
           </TooltipTrigger>
           <TooltipContent side="bottom">Undo</TooltipContent>
         </Tooltip>
@@ -199,6 +197,18 @@ function Header() {
               <HugeiconsIcon icon={Tick02Icon} data-icon="inline-start" className="size-3" strokeWidth={2.5} />
               Save
             </>
+          )}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={editor.saveAsNewVersion}
+          disabled={state.savingAsNewVersion}
+        >
+          {state.savingAsNewVersion ? (
+            <Spinner className="size-3" />
+          ) : (
+            'Save as new version'
           )}
         </Button>
       </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -12,8 +12,7 @@ import {
   PencilEdit01Icon,
   Tick02Icon,
 } from '@hugeicons/core-free-icons'
-import type {
-  listKioskConfigurationsFn} from '@/utils/kiosk-configurations/kiosk-configurations.functions';
+import type { listKioskConfigurationsFn } from '@/utils/kiosk-configurations/kiosk-configurations.functions'
 import {
   createKioskConfigurationFn,
   deleteKioskConfigurationFn,
@@ -72,53 +71,93 @@ export function KioskConfigurations() {
   const configurations = Route.useLoaderData()
   const router = useRouter()
   const refreshConfigurations = () => router.invalidate({ sync: true })
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(
+    () => configurations[0]?.id ?? null,
+  )
+  const selectedConfig = configurations.find((c) => c.id === selectedConfigId)
+
+  useEffect(() => {
+    const exists = configurations.some((c) => c.id === selectedConfigId)
+    if (!exists && configurations.length > 0) {
+      setSelectedConfigId(configurations[0].id)
+    } else if (configurations.length === 0) {
+      setSelectedConfigId(null)
+    }
+  }, [configurations, selectedConfigId])
 
   return (
-    <div className="mx-auto max-w-3xl px-4 pt-24">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-medium">Kiosk Configurations</h1>
-          <p className="text-xs text-muted-foreground">
-            Manage your kiosk display configurations
-          </p>
+    <div className="flex h-[calc(100vh-var(--navbar-height,4rem))] overflow-hidden pt-16">
+      {/* Left: configuration list */}
+      <aside className="flex w-80 shrink-0 flex-col border-r border-border bg-background">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <div className="min-w-0">
+            <h1 className="text-lg font-medium">Configurations</h1>
+          </div>
+          <CreateDialog onCreated={refreshConfigurations} />
         </div>
-        <CreateDialog onCreated={refreshConfigurations} />
-      </div>
 
-      <div className="mt-6">
-        {configurations.length === 0 ? (
-          <Empty className="border py-16">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">
-                <HugeiconsIcon icon={ComputerIcon} />
-              </EmptyMedia>
-              <EmptyTitle>No configurations yet</EmptyTitle>
-              <EmptyDescription>
-                Create your first kiosk configuration to get started.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          {configurations.length === 0 ? (
+            <Empty className="border py-12">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <HugeiconsIcon icon={ComputerIcon} />
+                </EmptyMedia>
+                <EmptyTitle>No configurations yet</EmptyTitle>
+                <EmptyDescription>
+                  Create your first kiosk configuration to get started.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {configurations.map((config) => (
+                <ConfigurationRow
+                  key={config.id}
+                  config={config}
+                  isSelected={selectedConfigId === config.id}
+                  onSelect={() => setSelectedConfigId(config.id)}
+                  onMutated={refreshConfigurations}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Right: iframe preview */}
+      <main className="min-w-0 flex-1 bg-muted/30">
+        {selectedConfig ? (
+          <iframe
+            key={selectedConfig.id}
+            title={`Preview: ${selectedConfig.name}`}
+            src={`/viewer/${selectedConfig.id}`}
+            className="h-full w-full border-0"
+            sandbox="allow-same-origin allow-scripts"
+          />
         ) : (
-          <div className="flex flex-col gap-2">
-            {configurations.map((config) => (
-              <ConfigurationRow
-                key={config.id}
-                config={config}
-                onMutated={refreshConfigurations}
-              />
-            ))}
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+            <HugeiconsIcon icon={ComputerIcon} className="size-12 opacity-50" />
+            <p className="text-sm font-medium">Select a configuration</p>
+            <p className="text-xs">
+              Choose one from the list to preview it here
+            </p>
           </div>
         )}
-      </div>
+      </main>
     </div>
   )
 }
 
 function ConfigurationRow({
   config,
+  isSelected,
+  onSelect,
   onMutated,
 }: {
   config: KioskConfig
+  isSelected: boolean
+  onSelect: () => void
   onMutated: () => Promise<void>
 }) {
   const navigate = useNavigate()
@@ -176,8 +215,23 @@ function ConfigurationRow({
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-lg bg-card px-4 py-3 ring-1 ring-foreground/10">
-      <div className="min-w-0 flex-1">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect()
+        }
+      }}
+      className={`flex cursor-pointer items-center gap-3 rounded-lg px-4 py-3 ring-1 transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${
+        isSelected
+          ? 'bg-primary/10 ring-primary/30 dark:bg-primary/15'
+          : 'bg-card ring-foreground/10 hover:bg-muted/50'
+      }`}
+    >
+      <div className="min-w-0 flex-1" onClick={(e) => e.stopPropagation()}>
         {editing ? (
           <div className="flex items-center gap-1.5">
             <Input
@@ -230,7 +284,12 @@ function ConfigurationRow({
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button variant="ghost" size="icon-sm" aria-label="Actions" />
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Actions"
+                onClick={(e) => e.stopPropagation()}
+              />
             }
           >
             <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
@@ -378,7 +437,7 @@ function CreateDialog({ onCreated }: { onCreated: () => Promise<void> }) {
         render={<Button size="sm" />}
       >
         <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" strokeWidth={2} />
-        New Configuration
+        New
       </DialogTrigger>
 
       <DialogContent className="sm:max-w-md">
