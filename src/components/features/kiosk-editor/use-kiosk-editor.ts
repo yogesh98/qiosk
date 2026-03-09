@@ -1,35 +1,34 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { flushSync } from 'react-dom'
 import { toast } from 'sonner'
 import { componentRegistry } from './kiosk-component-registry'
+import type { ComponentTypeId } from './kiosk-component-registry'
 import type {
   KioskConfigurationContent,
   KioskConfigurationContentComponent,
   KioskConfigurationContentPage,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import type { KioskConfigurationEditorState } from '@/utils/kiosk-configurations/kiosk-configurations.server'
-import type { ComponentTypeId } from './kiosk-component-registry'
 import {
   createDefaultPage,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import {
-  appendKioskConfigurationContentEditFn,
-  saveKioskConfigurationContentVersionFn,
-  undoKioskConfigurationContentEditFn,
+  saveKioskConfigurationAsNewVersionFn,
+  saveKioskConfigurationFn,
 } from '@/utils/kiosk-configurations/kiosk-configurations.functions'
 
-const PERSIST_DEBOUNCE_MS = 400
+const MAX_HISTORY_LENGTH = 100
 
 export type KioskEditorState = {
   content: KioskConfigurationContent
   selectedPageId: string | null
   selectedComponentId: string | null
   saving: boolean
-  undoing: boolean
+  savingAsNewVersion: boolean
   persisting: boolean
+  hasUnsavedChanges: boolean
+  currentVersionNumber: number | null
+  undoStack: Array<KioskConfigurationContent>
   redoStack: Array<KioskConfigurationContent>
-  versionLabel: string
-  draftRevision: number | null
 }
 
 function ensureAtLeastOnePage(content: KioskConfigurationContent): {
@@ -39,6 +38,7 @@ function ensureAtLeastOnePage(content: KioskConfigurationContent): {
   if (content.pages.length > 0) {
     return { content, selectedPageId: content.pages[0].id }
   }
+
   const page = createDefaultPage()
   return {
     content: { ...content, pages: [page] },
@@ -46,8 +46,15 @@ function ensureAtLeastOnePage(content: KioskConfigurationContent): {
   }
 }
 
+function pushHistory(
+  stack: Array<KioskConfigurationContent>,
+  snapshot: KioskConfigurationContent,
+) {
+  return [snapshot, ...stack].slice(0, MAX_HISTORY_LENGTH)
+}
+
 export function useKioskEditor(editorState: KioskConfigurationEditorState) {
-  const { configuration, latestEdit, latestVersion } = editorState
+  const { configuration, currentVersion } = editorState
   const initial = ensureAtLeastOnePage(editorState.currentContent)
 
   const [state, setState] = useState<KioskEditorState>({
@@ -55,135 +62,49 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     selectedPageId: initial.selectedPageId,
     selectedComponentId: null,
     saving: false,
-    undoing: false,
+    savingAsNewVersion: false,
     persisting: false,
+    hasUnsavedChanges: false,
+    currentVersionNumber: currentVersion?.version ?? null,
+    undoStack: [],
     redoStack: [],
-    versionLabel: latestVersion ? `v${latestVersion.version}` : 'Unsaved',
-    draftRevision: latestEdit?.revision ?? null,
   })
 
-  const persistingRef = useRef(false)
   const selectedPageIdRef = useRef(state.selectedPageId)
   selectedPageIdRef.current = state.selectedPageId
-  const redoStackRef = useRef(state.redoStack)
-  redoStackRef.current = state.redoStack
-  const pendingPersistRef = useRef<{ content: KioskConfigurationContent; changeType: string } | null>(null)
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const transientHistoryBaseRef = useRef<KioskConfigurationContent | null>(null)
 
   const currentPage = useMemo(
-    () => state.content.pages.find((p) => p.id === state.selectedPageId),
+    () => state.content.pages.find((page) => page.id === state.selectedPageId),
     [state.content.pages, state.selectedPageId],
   )
 
   const selectedComponent = useMemo(
-    () => currentPage?.components.find((c) => c.id === state.selectedComponentId),
+    () =>
+      currentPage?.components.find(
+        (component) => component.id === state.selectedComponentId,
+      ),
     [currentPage?.components, state.selectedComponentId],
   )
 
-  const sendPersist = useCallback(
-    async (content: KioskConfigurationContent, changeType: string) => {
-      if (persistingRef.current) {
-        pendingPersistRef.current = { content, changeType }
-        return
-      }
-      persistingRef.current = true
-      setState((s) => ({ ...s, persisting: true }))
-      try {
-        const result = await appendKioskConfigurationContentEditFn({
-          data: { id: configuration.id, changeType, content },
-        })
-        const resolved = result as { latestEdit?: { revision: number } | null }
-        setState((s) => ({
-          ...s,
-          draftRevision: resolved.latestEdit?.revision ?? s.draftRevision,
-          persisting: false,
-        }))
-      } catch {
-        toast.error('Failed to save edit')
-        setState((s) => ({ ...s, persisting: false }))
-      } finally {
-        persistingRef.current = false
-        if (pendingPersistRef.current) {
-          const { content: next, changeType: ct } = pendingPersistRef.current
-          pendingPersistRef.current = null
-          sendPersist(next, ct)
-        }
-      }
-    },
-    [configuration.id],
-  )
-
-  const cancelPendingPersist = useCallback(() => {
-    if (persistTimerRef.current) {
-      clearTimeout(persistTimerRef.current)
-      persistTimerRef.current = null
-    }
-    pendingPersistRef.current = null
-  }, [])
-
-  const schedulePersist = useCallback(
-    (content: KioskConfigurationContent, changeType: string) => {
-      pendingPersistRef.current = { content, changeType }
-      if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
-      persistTimerRef.current = setTimeout(() => {
-        persistTimerRef.current = null
-        const pending = pendingPersistRef.current
-        if (pending) {
-          pendingPersistRef.current = null
-          sendPersist(pending.content, pending.changeType)
-        }
-      }, PERSIST_DEBOUNCE_MS)
-    },
-    [sendPersist],
-  )
-
-  const flushPersist = useCallback(() => {
-    if (persistTimerRef.current) {
-      clearTimeout(persistTimerRef.current)
-      persistTimerRef.current = null
-    }
-    const pending = pendingPersistRef.current
-    if (pending) {
-      pendingPersistRef.current = null
-      sendPersist(pending.content, pending.changeType)
-    }
-  }, [sendPersist])
-
-  const flushPersistAndWait = useCallback(async () => {
-    for (;;) {
-      if (persistTimerRef.current) {
-        clearTimeout(persistTimerRef.current)
-        persistTimerRef.current = null
-      }
-
-      if (persistingRef.current) {
-        await new Promise((resolve) => setTimeout(resolve, 25))
-        continue
-      }
-
-      const pending = pendingPersistRef.current
-      if (pending) {
-        pendingPersistRef.current = null
-        await sendPersist(pending.content, pending.changeType)
-        continue
-      }
-
-      break
-    }
-  }, [sendPersist])
-
-  const updateContent = useCallback(
+  const commitContentChange = useCallback(
     (
       updater: (content: KioskConfigurationContent) => KioskConfigurationContent,
-      changeType: string,
+      _changeType: string,
     ) => {
-      setState((s) => {
-        const nextContent = updater(s.content)
-        schedulePersist(nextContent, changeType)
-        return { ...s, content: nextContent, redoStack: [] }
+      setState((current) => {
+        const nextContent = updater(current.content)
+
+        return {
+          ...current,
+          content: nextContent,
+          undoStack: pushHistory(current.undoStack, current.content),
+          redoStack: [],
+          hasUnsavedChanges: true,
+        }
       })
     },
-    [schedulePersist],
+    [],
   )
 
   const updatePage = useCallback(
@@ -192,40 +113,95 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       changeType: string,
     ) => {
       const pageId = selectedPageIdRef.current
-      updateContent(
+      commitContentChange(
         (content) => ({
           ...content,
-          pages: content.pages.map((p) =>
-            p.id === pageId ? updater(p) : p,
+          pages: content.pages.map((page) =>
+            page.id === pageId ? updater(page) : page,
           ),
         }),
         changeType,
       )
     },
-    [updateContent],
+    [commitContentChange],
+  )
+
+  const updatePageLocal = useCallback(
+    (
+      updater: (page: KioskConfigurationContentPage) => KioskConfigurationContentPage,
+    ) => {
+      setState((current) => {
+        if (!transientHistoryBaseRef.current) {
+          transientHistoryBaseRef.current = current.content
+        }
+
+        return {
+          ...current,
+          content: {
+            ...current.content,
+            pages: current.content.pages.map((page) =>
+              page.id === current.selectedPageId ? updater(page) : page,
+            ),
+          },
+          hasUnsavedChanges: true,
+        }
+      })
+    },
+    [],
+  )
+
+  const finalizeTransientChange = useCallback(
+    () => {
+      setState((current) => {
+        const transientBase = transientHistoryBaseRef.current
+        transientHistoryBaseRef.current = null
+
+        return {
+          ...current,
+          undoStack: transientBase
+            ? pushHistory(current.undoStack, transientBase)
+            : current.undoStack,
+          redoStack: [],
+          hasUnsavedChanges: true,
+        }
+      })
+    },
+    [],
   )
 
   const addComponent = useCallback(
     (type: ComponentTypeId) => {
       const entry = componentRegistry[type]
-      const comp = entry.createDefault(configuration.width, configuration.height)
-      const maxZ = currentPage?.components.reduce(
-        (max, c) => Math.max(max, c.layout.zIndex),
-        -1,
-      ) ?? -1
-      comp.layout.zIndex = maxZ + 1
+      const component = entry.createDefault(
+        configuration.width,
+        configuration.height,
+      )
+      const maxZIndex =
+        currentPage?.components.reduce(
+          (highest, item) => Math.max(highest, item.layout.zIndex),
+          -1,
+        ) ?? -1
+
+      component.layout.zIndex = maxZIndex + 1
 
       updatePage(
-        (page) => ({ ...page, components: [...page.components, comp] }),
+        (page) => ({
+          ...page,
+          components: [...page.components, component],
+        }),
         `add_${type}`,
       )
-      setState((s) => ({ ...s, selectedComponentId: comp.id }))
+
+      setState((current) => ({
+        ...current,
+        selectedComponentId: component.id,
+      }))
     },
-    [updatePage, currentPage, configuration.width, configuration.height],
+    [configuration.height, configuration.width, currentPage, updatePage],
   )
 
   const selectComponent = useCallback((id: string | null) => {
-    setState((s) => ({ ...s, selectedComponentId: id }))
+    setState((current) => ({ ...current, selectedComponentId: id }))
   }, [])
 
   const updateComponentProps = useCallback(
@@ -233,10 +209,13 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       updatePage(
         (page) => ({
           ...page,
-          components: page.components.map((c) =>
-            c.id === componentId
-              ? { ...c, props: { ...c.props, ...props } }
-              : c,
+          components: page.components.map((component) =>
+            component.id === componentId
+              ? {
+                  ...component,
+                  props: { ...component.props, ...props },
+                }
+              : component,
           ),
         }),
         'update_props',
@@ -253,8 +232,8 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       updatePage(
         (page) => ({
           ...page,
-          components: page.components.map((c) =>
-            c.id === componentId ? { ...c, action } : c,
+          components: page.components.map((component) =>
+            component.id === componentId ? { ...component, action } : component,
           ),
         }),
         'update_action',
@@ -263,46 +242,21 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     [updatePage],
   )
 
-  const updatePageLocal = useCallback(
-    (
-      updater: (page: KioskConfigurationContentPage) => KioskConfigurationContentPage,
-    ) => {
-      setState((s) => ({
-        ...s,
-        content: {
-          ...s.content,
-          pages: s.content.pages.map((p) =>
-            p.id === s.selectedPageId ? updater(p) : p,
-          ),
-        },
-      }))
-    },
-    [],
-  )
-
-  const persistCurrentContent = useCallback(
-    (changeType: string) => {
-      cancelPendingPersist()
-      let content: KioskConfigurationContent
-      flushSync(() => {
-        setState((s) => {
-          content = s.content
-          return { ...s, redoStack: [] }
-        })
-      })
-      sendPersist(content!, changeType)
-    },
-    [cancelPendingPersist, sendPersist],
-  )
-
   const moveComponentLocal = useCallback(
     (componentId: string, x: number, y: number) => {
       updatePageLocal((page) => ({
         ...page,
-        components: page.components.map((c) =>
-          c.id === componentId
-            ? { ...c, layout: { ...c.layout, x: Math.round(x), y: Math.round(y) } }
-            : c,
+        components: page.components.map((component) =>
+          component.id === componentId
+            ? {
+                ...component,
+                layout: {
+                  ...component.layout,
+                  x: Math.round(x),
+                  y: Math.round(y),
+                },
+              }
+            : component,
         ),
       }))
     },
@@ -313,21 +267,28 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     (componentId: string, w: number, h: number) => {
       updatePageLocal((page) => ({
         ...page,
-        components: page.components.map((c) =>
-          c.id === componentId
+        components: page.components.map((component) =>
+          component.id === componentId
             ? {
-                ...c,
+                ...component,
                 layout: {
-                  ...c.layout,
+                  ...component.layout,
                   w: Math.max(20, Math.round(w)),
                   h: Math.max(20, Math.round(h)),
                 },
               }
-            : c,
+            : component,
         ),
       }))
     },
     [updatePageLocal],
+  )
+
+  const persistCurrentContent = useCallback(
+    (_changeType: string) => {
+      finalizeTransientChange()
+    },
+    [finalizeTransientChange],
   )
 
   const deleteComponent = useCallback(
@@ -335,14 +296,19 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       updatePage(
         (page) => ({
           ...page,
-          components: page.components.filter((c) => c.id !== componentId),
+          components: page.components.filter(
+            (component) => component.id !== componentId,
+          ),
         }),
-        'delete',
+        'delete_component',
       )
-      setState((s) => ({
-        ...s,
+
+      setState((current) => ({
+        ...current,
         selectedComponentId:
-          s.selectedComponentId === componentId ? null : s.selectedComponentId,
+          current.selectedComponentId === componentId
+            ? null
+            : current.selectedComponentId,
       }))
     },
     [updatePage],
@@ -351,18 +317,24 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   const reorderLayers = useCallback(
     (orderedIds: Array<string>) => {
       if (orderedIds.length === 0) return
+
       updatePage(
         (page) => {
-          const idToIdx = new Map(orderedIds.map((id, i) => [id, i]))
-          const n = orderedIds.length
+          const indexById = new Map(orderedIds.map((id, index) => [id, index]))
+          const total = orderedIds.length
+
           return {
             ...page,
-            components: page.components.map((c) => {
-              const idx = idToIdx.get(c.id)
-              if (idx === undefined) return c
+            components: page.components.map((component) => {
+              const index = indexById.get(component.id)
+              if (index === undefined) return component
+
               return {
-                ...c,
-                layout: { ...c.layout, zIndex: n - 1 - idx },
+                ...component,
+                layout: {
+                  ...component.layout,
+                  zIndex: total - 1 - index,
+                },
               }
             }),
           }
@@ -377,19 +349,26 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     (componentId: string) => {
       updatePage(
         (page) => {
-          const maxZ = page.components.reduce(
-            (max, c) => Math.max(max, c.layout.zIndex),
+          const maxZIndex = page.components.reduce(
+            (highest, component) => Math.max(highest, component.layout.zIndex),
             0,
           )
+
           return {
             ...page,
-            components: page.components.map((c) =>
-              c.id === componentId
+            components: page.components.map((component) =>
+              component.id === componentId
                 ? {
-                    ...c,
-                    layout: { ...c.layout, zIndex: Math.min(maxZ + 1, c.layout.zIndex + 1) },
+                    ...component,
+                    layout: {
+                      ...component.layout,
+                      zIndex: Math.min(
+                        maxZIndex + 1,
+                        component.layout.zIndex + 1,
+                      ),
+                    },
                   }
-                : c,
+                : component,
             ),
           }
         },
@@ -404,13 +383,16 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       updatePage(
         (page) => ({
           ...page,
-          components: page.components.map((c) =>
-            c.id === componentId
+          components: page.components.map((component) =>
+            component.id === componentId
               ? {
-                  ...c,
-                  layout: { ...c.layout, zIndex: Math.max(0, c.layout.zIndex - 1) },
+                  ...component,
+                  layout: {
+                    ...component.layout,
+                    zIndex: Math.max(0, component.layout.zIndex - 1),
+                  },
                 }
-              : c,
+              : component,
           ),
         }),
         'send_backward',
@@ -422,129 +404,193 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   const addPage = useCallback(
     (name: string) => {
       const page = createDefaultPage(name)
-      updateContent(
-        (content) => ({ ...content, pages: [...content.pages, page] }),
+
+      commitContentChange(
+        (content) => ({
+          ...content,
+          pages: [...content.pages, page],
+        }),
         'add_page',
       )
-      setState((s) => ({ ...s, selectedPageId: page.id, selectedComponentId: null }))
+
+      setState((current) => ({
+        ...current,
+        selectedPageId: page.id,
+        selectedComponentId: null,
+      }))
     },
-    [updateContent],
+    [commitContentChange],
   )
 
   const selectPage = useCallback((pageId: string) => {
-    setState((s) => ({ ...s, selectedPageId: pageId, selectedComponentId: null }))
+    setState((current) => ({
+      ...current,
+      selectedPageId: pageId,
+      selectedComponentId: null,
+    }))
   }, [])
 
   const deletePage = useCallback(
     (pageId: string) => {
-      setState((s) => {
-        const remainingPages = s.content.pages.filter((p) => p.id !== pageId)
+      setState((current) => {
+        const remainingPages = current.content.pages.filter(
+          (page) => page.id !== pageId,
+        )
         const nextPages =
           remainingPages.length > 0 ? remainingPages : [createDefaultPage()]
         const nextContent = {
-          ...s.content,
+          ...current.content,
           pages: nextPages,
         }
 
-        schedulePersist(nextContent, 'delete_page')
-
         return {
-          ...s,
+          ...current,
           content: nextContent,
           selectedPageId:
-            s.selectedPageId !== pageId &&
-            nextPages.some((p) => p.id === s.selectedPageId)
-              ? s.selectedPageId
+            current.selectedPageId !== pageId &&
+            nextPages.some((page) => page.id === current.selectedPageId)
+              ? current.selectedPageId
               : nextPages[0]?.id ?? null,
           selectedComponentId: null,
+          undoStack: pushHistory(current.undoStack, current.content),
           redoStack: [],
+          hasUnsavedChanges: true,
         }
       })
     },
-    [schedulePersist],
+    [],
   )
 
   const renamePage = useCallback(
     (pageId: string, name: string) => {
-      updateContent(
+      commitContentChange(
         (content) => ({
           ...content,
-          pages: content.pages.map((p) => (p.id === pageId ? { ...p, name } : p)),
+          pages: content.pages.map((page) =>
+            page.id === pageId ? { ...page, name } : page,
+          ),
         }),
         'rename_page',
       )
     },
-    [updateContent],
+    [commitContentChange],
   )
 
-  const undo = useCallback(async () => {
-    setState((s) => ({ ...s, undoing: true }))
-    try {
-      await flushPersistAndWait()
-      const result = await undoKioskConfigurationContentEditFn({
-        data: { id: configuration.id },
-      })
-      const resolved = result as {
-        currentContent: KioskConfigurationContent
-        latestEdit?: { revision: number } | null
-      }
-      const withPage = ensureAtLeastOnePage(resolved.currentContent)
-      setState((s) => ({
-        ...s,
+  const undo = useCallback(() => {
+    setState((current) => {
+      if (current.undoStack.length === 0) return current
+
+      const [previousContent, ...remainingUndo] = current.undoStack
+
+      const currentContent = current.content
+      const withPage = ensureAtLeastOnePage(previousContent)
+
+      transientHistoryBaseRef.current = null
+
+      return {
+        ...current,
         content: withPage.content,
-        selectedPageId: withPage.content.pages.find((p) => p.id === s.selectedPageId)
-          ? s.selectedPageId
+        selectedPageId: withPage.content.pages.find(
+          (page) => page.id === current.selectedPageId,
+        )
+          ? current.selectedPageId
           : withPage.selectedPageId,
         selectedComponentId: null,
-        redoStack: [s.content, ...s.redoStack],
-        draftRevision: resolved.latestEdit?.revision ?? null,
-        undoing: false,
-      }))
-    } catch {
-      toast.error('Nothing to undo')
-      setState((s) => ({ ...s, undoing: false }))
-    }
-  }, [configuration.id, flushPersistAndWait])
+        undoStack: remainingUndo,
+        redoStack: pushHistory(current.redoStack, currentContent),
+        hasUnsavedChanges: true,
+      }
+    })
+  }, [])
 
   const redo = useCallback(() => {
-    flushPersist()
-    const stack = redoStackRef.current
-    if (stack.length === 0) return
-    const [next, ...rest] = stack
-    const withPage = ensureAtLeastOnePage(next)
-    sendPersist(withPage.content, 'redo')
-    setState((s) => ({
-      ...s,
-      content: withPage.content,
-      selectedPageId: withPage.selectedPageId,
-      selectedComponentId: null,
-      redoStack: rest,
-    }))
-  }, [flushPersist, sendPersist])
+    setState((current) => {
+      if (current.redoStack.length === 0) return current
+
+      const [nextContent, ...remainingRedo] = current.redoStack
+
+      const currentContent = current.content
+      const withPage = ensureAtLeastOnePage(nextContent)
+
+      transientHistoryBaseRef.current = null
+
+      return {
+        ...current,
+        content: withPage.content,
+        selectedPageId: withPage.content.pages.find(
+          (page) => page.id === current.selectedPageId,
+        )
+          ? current.selectedPageId
+          : withPage.selectedPageId,
+        selectedComponentId: null,
+        undoStack: pushHistory(current.undoStack, currentContent),
+        redoStack: remainingRedo,
+        hasUnsavedChanges: true,
+      }
+    })
+  }, [])
 
   const save = useCallback(async () => {
-    setState((s) => ({ ...s, saving: true }))
+    setState((current) => ({ ...current, saving: true, persisting: true }))
+
     try {
-      await flushPersistAndWait()
-      const result = await saveKioskConfigurationContentVersionFn({
-        data: { id: configuration.id },
+      const result = await saveKioskConfigurationFn({
+        data: {
+          id: configuration.id,
+          content: state.content,
+        },
       })
-      const resolved = result as {
-        latestVersion?: { version: number } | null
-      }
-      setState((s) => ({
-        ...s,
-        saving: false,
-        versionLabel: resolved.latestVersion
-          ? `v${resolved.latestVersion.version}`
-          : s.versionLabel,
+      const resolved = result as { currentVersion?: { version: number } | null }
+      setState((current) => ({
+        ...current,
+        hasUnsavedChanges: false,
+        currentVersionNumber:
+          resolved.currentVersion?.version ?? current.currentVersionNumber,
       }))
-      toast.success('Version saved')
+      toast.success('Configuration saved')
     } catch {
-      toast.error('Failed to save version')
-      setState((s) => ({ ...s, saving: false }))
+      toast.error('Failed to save configuration')
+    } finally {
+      setState((current) => ({
+        ...current,
+        saving: false,
+        persisting: false,
+      }))
     }
-  }, [configuration.id, flushPersistAndWait])
+  }, [configuration.id, state.content])
+
+  const saveAsNewVersion = useCallback(async () => {
+    setState((current) => ({
+      ...current,
+      savingAsNewVersion: true,
+      persisting: true,
+    }))
+
+    try {
+      const result = await saveKioskConfigurationAsNewVersionFn({
+        data: {
+          id: configuration.id,
+          content: state.content,
+        },
+      })
+      const resolved = result as { currentVersion?: { version: number } | null }
+      setState((current) => ({
+        ...current,
+        hasUnsavedChanges: false,
+        currentVersionNumber:
+          resolved.currentVersion?.version ?? current.currentVersionNumber,
+      }))
+      toast.success('New version created')
+    } catch {
+      toast.error('Failed to create new version')
+    } finally {
+      setState((current) => ({
+        ...current,
+        savingAsNewVersion: false,
+        persisting: false,
+      }))
+    }
+  }, [configuration.id, state.content])
 
   return {
     state,
@@ -569,6 +615,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     undo,
     redo,
     save,
+    saveAsNewVersion,
   }
 }
 
