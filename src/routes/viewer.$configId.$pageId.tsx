@@ -9,6 +9,7 @@ export const Route = createFileRoute('/viewer/$configId/$pageId')({
 
 function ViewerPage() {
   const { viewerState } = parentRoute.useLoaderData()
+  const search = parentRoute.useSearch()
   const { configId, pageId } = Route.useParams()
   const navigate = useNavigate()
 
@@ -18,6 +19,7 @@ function ViewerPage() {
     navigate({
       to: '/viewer/$configId/$pageId',
       params: { configId, pageId: targetPageId },
+      search,
     })
   }
 

@@ -96,8 +96,14 @@ function Header() {
   const editor = useKioskEditorContext()
   const { state, configuration } = editor
   const viewerPageId = state.selectedPageId ?? state.content.pages[0]?.id
-  const versionLabel =
-    state.currentVersionNumber === null ? 'Draft' : `v${state.currentVersionNumber}`
+  const currentVersionLabel =
+    state.currentVersionNumber === null
+      ? 'Current draft'
+      : `Current v${state.currentVersionNumber}`
+  const sourceVersionLabel =
+    state.sourceVersionNumber === null
+      ? null
+      : `Editing from v${state.sourceVersionNumber}`
   const saveLabel = state.persisting
     ? 'Saving'
     : state.hasUnsavedChanges
@@ -123,8 +129,13 @@ function Header() {
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold">{configuration.name}</span>
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-            {versionLabel}
+            {currentVersionLabel}
           </span>
+          {sourceVersionLabel && (
+            <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+              {sourceVersionLabel}
+            </span>
+          )}
           <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
             {saveLabel}
           </span>

@@ -27,6 +27,8 @@ export type KioskEditorState = {
   persisting: boolean
   hasUnsavedChanges: boolean
   currentVersionNumber: number | null
+  sourceVersionId: string | null
+  sourceVersionNumber: number | null
   undoStack: Array<KioskConfigurationContent>
   redoStack: Array<KioskConfigurationContent>
 }
@@ -54,7 +56,7 @@ function pushHistory(
 }
 
 export function useKioskEditor(editorState: KioskConfigurationEditorState) {
-  const { configuration, currentVersion } = editorState
+  const { configuration, currentVersion, sourceVersion } = editorState
   const initial = ensureAtLeastOnePage(editorState.currentContent)
 
   const [state, setState] = useState<KioskEditorState>({
@@ -66,6 +68,8 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
     persisting: false,
     hasUnsavedChanges: false,
     currentVersionNumber: currentVersion?.version ?? null,
+    sourceVersionId: sourceVersion?.id ?? null,
+    sourceVersionNumber: sourceVersion?.version ?? null,
     undoStack: [],
     redoStack: [],
   })
@@ -546,6 +550,8 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
         hasUnsavedChanges: false,
         currentVersionNumber:
           resolved.currentVersion?.version ?? current.currentVersionNumber,
+        sourceVersionId: null,
+        sourceVersionNumber: null,
       }))
       toast.success('Configuration saved')
     } catch {
@@ -579,6 +585,8 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
         hasUnsavedChanges: false,
         currentVersionNumber:
           resolved.currentVersion?.version ?? current.currentVersionNumber,
+        sourceVersionId: null,
+        sourceVersionNumber: null,
       }))
       toast.success('New version created')
     } catch {

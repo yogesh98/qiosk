@@ -2,6 +2,7 @@ import type { Prisma } from '@/generated/prisma/client'
 import type { KioskConfigurationContent } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
 import { prisma } from '@/utils/db.server'
 import {
+  createDefaultKioskConfigurationContent,
   parseKioskConfigurationContent,
   serializeKioskConfigurationContent,
 } from '@/utils/kiosk-configurations/kiosk-configuration-content.schema'
@@ -9,6 +10,12 @@ import {
 type ConfigurationRecord = Awaited<
   ReturnType<typeof getKioskConfigurationById>
 >
+type PublicConfigurationRecord = Awaited<
+  ReturnType<typeof getKioskConfigurationByIdPublic>
+>
+type DuplicateNameClient =
+  | Prisma.TransactionClient
+  | typeof prisma
 
 export type KioskConfigurationLogSummary = {
   id: string
@@ -28,8 +35,15 @@ export type KioskConfigurationEditorState = {
   configuration: NonNullable<ConfigurationRecord>
   currentContent: KioskConfigurationContent
   currentVersion: KioskConfigurationVersionSummary | null
+  sourceVersion: KioskConfigurationVersionSummary | null
   versions: Array<KioskConfigurationVersionSummary>
   recentLogs: Array<KioskConfigurationLogSummary>
+}
+
+export type KioskConfigurationManagementState = {
+  configuration: NonNullable<ConfigurationRecord>
+  currentVersion: KioskConfigurationVersionSummary | null
+  versions: Array<KioskConfigurationVersionSummary>
 }
 
 const DEFAULT_LOG_LIMIT = 20
@@ -57,6 +71,58 @@ function toVersionSummary(
 
 function createLogMessage(message: string) {
   return message.trim() || 'Updated configuration'
+}
+
+async function getKioskConfigurationVersionById(
+  versionId: string,
+  userId: string,
+) {
+  return prisma.kioskConfigurationVersion.findFirst({
+    where: {
+      id: versionId,
+      kioskConfiguration: { createdById: userId },
+    },
+  })
+}
+
+async function getPublicKioskConfigurationVersionById(
+  kioskConfigurationId: string,
+  versionId: string,
+) {
+  return prisma.kioskConfigurationVersion.findFirst({
+    where: {
+      id: versionId,
+      kioskConfigurationId,
+    },
+  })
+}
+
+async function buildUniqueDuplicateName(
+  sourceName: string,
+  userId: string,
+  db: DuplicateNameClient,
+) {
+  const baseName = `${sourceName} Copy`
+  const existingNames = await db.kioskConfiguration.findMany({
+    where: {
+      createdById: userId,
+      OR: [
+        { name: baseName },
+        { name: { startsWith: `${baseName} ` } },
+      ],
+    },
+    select: { name: true },
+  })
+
+  const existing = new Set(existingNames.map((item) => item.name))
+  if (!existing.has(baseName)) return baseName
+
+  let copyNumber = 2
+  while (existing.has(`${baseName} ${copyNumber}`)) {
+    copyNumber += 1
+  }
+
+  return `${baseName} ${copyNumber}`
 }
 
 export async function createKioskConfiguration(
@@ -144,24 +210,60 @@ export async function listKioskConfigurationVersions(
   return versions.map((version) => toVersionSummary(version)!)
 }
 
+export async function getKioskConfigurationManagementState(
+  kioskConfigurationId: string,
+  userId: string,
+): Promise<KioskConfigurationManagementState | null> {
+  const configuration = await getKioskConfigurationById(kioskConfigurationId, userId)
+  if (!configuration) return null
+
+  const versions = await listKioskConfigurationVersions(kioskConfigurationId, userId)
+
+  return {
+    configuration,
+    currentVersion: toVersionSummary(configuration.currentVersion),
+    versions,
+  }
+}
+
 export async function getKioskConfigurationEditorState(
   kioskConfigurationId: string,
   userId: string,
+  sourceVersionId?: string | null,
 ): Promise<KioskConfigurationEditorState | null> {
   const configuration = await getKioskConfigurationById(kioskConfigurationId, userId)
   if (!configuration) return null
 
-  const [recentLogs, versions] = await Promise.all([
+  const [recentLogs, versions, sourceVersionRecord] = await Promise.all([
     listKioskConfigurationLogs(kioskConfigurationId, userId),
     listKioskConfigurationVersions(kioskConfigurationId, userId),
+    sourceVersionId
+      ? getKioskConfigurationVersionById(sourceVersionId, userId)
+      : Promise.resolve(null),
   ])
+
+  if (sourceVersionId && !sourceVersionRecord) {
+    throw new Error('Version not found')
+  }
+
+  if (
+    sourceVersionRecord &&
+    sourceVersionRecord.kioskConfigurationId !== kioskConfigurationId
+  ) {
+    throw new Error('Version not found')
+  }
+
+  const sourceVersion = sourceVersionRecord
+    ? toVersionSummary(sourceVersionRecord)
+    : null
+  const selectedContent = sourceVersionRecord?.content
+    ?? configuration.currentVersion?.content
 
   return {
     configuration,
-    currentContent: parseKioskConfigurationContent(
-      configuration.currentVersion?.content,
-    ),
+    currentContent: parseKioskConfigurationContent(selectedContent),
     currentVersion: toVersionSummary(configuration.currentVersion),
+    sourceVersion,
     versions,
     recentLogs,
   }
@@ -310,6 +412,74 @@ export async function saveKioskConfigurationAsNewVersion(
   })
 }
 
+export async function duplicateKioskConfiguration(
+  kioskConfigurationId: string,
+  userId: string,
+) {
+  return prisma.$transaction(async (tx) => {
+    const configuration = await tx.kioskConfiguration.findFirst({
+      where: { id: kioskConfigurationId, createdById: userId },
+      include: {
+        currentVersion: true,
+      },
+    })
+
+    if (!configuration) {
+      throw new Error('Configuration not found')
+    }
+
+    const duplicatedName = await buildUniqueDuplicateName(
+      configuration.name,
+      userId,
+      tx,
+    )
+    const duplicatedConfiguration = await tx.kioskConfiguration.create({
+      data: {
+        name: duplicatedName,
+        width: configuration.width,
+        height: configuration.height,
+        createdById: userId,
+      },
+    })
+
+    const initialContent = configuration.currentVersion?.content
+      ?? serializeKioskConfigurationContent(
+        createDefaultKioskConfigurationContent(),
+      )
+
+    const initialVersion = await tx.kioskConfigurationVersion.create({
+      data: {
+        kioskConfigurationId: duplicatedConfiguration.id,
+        version: 1,
+        content: initialContent,
+        createdById: userId,
+      },
+    })
+
+    await tx.kioskConfiguration.update({
+      where: { id: duplicatedConfiguration.id },
+      data: {
+        currentVersionId: initialVersion.id,
+      },
+    })
+
+    await tx.kioskConfigurationLog.create({
+      data: {
+        kioskConfigurationId: duplicatedConfiguration.id,
+        message: createLogMessage('Created version 1'),
+        createdById: userId,
+      },
+    })
+
+    return tx.kioskConfiguration.findUniqueOrThrow({
+      where: { id: duplicatedConfiguration.id },
+      include: {
+        currentVersion: true,
+      },
+    })
+  })
+}
+
 export async function getKioskConfigurationByIdPublic(id: string) {
   return prisma.kioskConfiguration.findFirst({
     where: { id },
@@ -320,22 +490,33 @@ export async function getKioskConfigurationByIdPublic(id: string) {
 }
 
 export type KioskConfigurationViewerState = {
-  configuration: NonNullable<
-    Awaited<ReturnType<typeof getKioskConfigurationByIdPublic>>
-  >
+  configuration: NonNullable<PublicConfigurationRecord>
   currentContent: KioskConfigurationContent
+  currentVersion: KioskConfigurationVersionSummary | null
+  viewingVersion: KioskConfigurationVersionSummary | null
 }
 
 export async function getKioskConfigurationViewerState(
   kioskConfigurationId: string,
+  versionId?: string | null,
 ): Promise<KioskConfigurationViewerState | null> {
   const configuration = await getKioskConfigurationByIdPublic(kioskConfigurationId)
   if (!configuration) return null
 
+  const viewingVersionRecord = versionId
+    ? await getPublicKioskConfigurationVersionById(kioskConfigurationId, versionId)
+    : configuration.currentVersion
+
+  if (versionId && !viewingVersionRecord) {
+    return null
+  }
+
   return {
     configuration,
     currentContent: parseKioskConfigurationContent(
-      configuration.currentVersion?.content,
+      viewingVersionRecord?.content ?? configuration.currentVersion?.content,
     ),
+    currentVersion: toVersionSummary(configuration.currentVersion),
+    viewingVersion: toVersionSummary(viewingVersionRecord),
   }
 }

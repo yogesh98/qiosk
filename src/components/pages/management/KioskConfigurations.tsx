@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -16,6 +16,8 @@ import type { listKioskConfigurationsFn } from '@/utils/kiosk-configurations/kio
 import {
   createKioskConfigurationFn,
   deleteKioskConfigurationFn,
+  duplicateKioskConfigurationFn,
+  getKioskConfigurationManagementStateFn,
   updateKioskConfigurationNameFn,
 } from '@/utils/kiosk-configurations/kiosk-configurations.functions'
 import { Route } from '@/routes/_authed/management/configurations'
@@ -56,8 +58,19 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type KioskConfig = Awaited<ReturnType<typeof listKioskConfigurationsFn>>[number]
+type KioskManagementState = Awaited<
+  ReturnType<typeof getKioskConfigurationManagementStateFn>
+>
 
 const RESOLUTION_PRESETS = [
   { label: '1080p (1920×1080)', width: 1920, height: 1080 },
@@ -67,13 +80,27 @@ const RESOLUTION_PRESETS = [
   { label: '4K Portrait (2160×3840)', width: 2160, height: 3840 },
 ] as const
 
+const LATEST_VERSION_VALUE = '__latest__'
+
+function formatVersionTimestamp(date: Date) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
 export function KioskConfigurations() {
   const configurations = Route.useLoaderData()
   const router = useRouter()
+  const navigate = useNavigate()
   const refreshConfigurations = () => router.invalidate({ sync: true })
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(
     () => configurations[0]?.id ?? null,
   )
+  const [selectedVersionId, setSelectedVersionId] = useState(LATEST_VERSION_VALUE)
+  const [managementState, setManagementState] = useState<KioskManagementState | null>(null)
+  const [loadingManagementState, setLoadingManagementState] = useState(false)
+  const [duplicatingConfigId, setDuplicatingConfigId] = useState<string | null>(null)
   const selectedConfig = configurations.find((c) => c.id === selectedConfigId)
 
   useEffect(() => {
@@ -85,13 +112,127 @@ export function KioskConfigurations() {
     }
   }, [configurations, selectedConfigId])
 
+  useEffect(() => {
+    setSelectedVersionId(LATEST_VERSION_VALUE)
+  }, [selectedConfigId])
+
+  useEffect(() => {
+    if (!selectedConfigId) {
+      setManagementState(null)
+      return
+    }
+
+    let cancelled = false
+    setLoadingManagementState(true)
+    setManagementState(null)
+
+    getKioskConfigurationManagementStateFn({
+      data: { id: selectedConfigId },
+    })
+      .then((nextState) => {
+        if (cancelled) return
+        setManagementState(nextState)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setManagementState(null)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingManagementState(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedConfigId, selectedConfig?.currentVersion?.id])
+
+  const previewVersion = useMemo(() => {
+    if (!managementState) return null
+    if (selectedVersionId === LATEST_VERSION_VALUE) {
+      return managementState.currentVersion
+    }
+    return managementState.versions.find((version) => version.id === selectedVersionId) ?? null
+  }, [managementState, selectedVersionId])
+
+  useEffect(() => {
+    if (!managementState) return
+    if (selectedVersionId === LATEST_VERSION_VALUE) return
+
+    const versionStillExists = managementState.versions.some(
+      (version) => version.id === selectedVersionId,
+    )
+
+    if (!versionStillExists) {
+      setSelectedVersionId(LATEST_VERSION_VALUE)
+    }
+  }, [managementState, selectedVersionId])
+
+  const versionOptions = useMemo(
+    () => [
+      {
+        value: LATEST_VERSION_VALUE,
+        label: managementState?.currentVersion
+          ? `Latest (Current) • v${managementState.currentVersion.version}`
+          : 'Latest (Current)',
+      },
+      ...(managementState?.versions ?? []).map((version) => ({
+        value: version.id,
+        label: `v${version.version} • ${formatVersionTimestamp(version.createdAt)}`,
+      })),
+    ],
+    [managementState],
+  )
+
+  const hasSavedVersions = (managementState?.versions.length ?? 0) > 0
+  const isViewingHistoricalVersion =
+    selectedVersionId !== LATEST_VERSION_VALUE
+    && previewVersion !== null
+    && previewVersion.id !== managementState?.currentVersion?.id
+  const historicalPreviewVersion = isViewingHistoricalVersion
+    ? previewVersion
+    : null
+
+  const previewSrc = selectedConfig
+    ? selectedVersionId === LATEST_VERSION_VALUE
+      ? `/viewer/${selectedConfig.id}`
+      : `/viewer/${selectedConfig.id}?versionId=${encodeURIComponent(selectedVersionId)}`
+    : null
+
+  async function handleDuplicateConfiguration(config: KioskConfig) {
+    setDuplicatingConfigId(config.id)
+    try {
+      const duplicated = await duplicateKioskConfigurationFn({
+        data: { id: config.id },
+      })
+      await refreshConfigurations()
+      setSelectedConfigId(duplicated.id)
+      toast.success(`Created "${duplicated.name}"`)
+    } catch {
+      toast.error('Failed to duplicate configuration')
+    } finally {
+      setDuplicatingConfigId(null)
+    }
+  }
+
+  function handleOpenEditor(configId: string, sourceVersionId?: string) {
+    navigate({
+      to: '/editor/$kioskId',
+      params: { kioskId: configId },
+      search: sourceVersionId ? { sourceVersionId } : {},
+    })
+  }
+
   return (
     <div className="flex h-[calc(100vh-var(--navbar-height,4rem))] overflow-hidden pt-16">
-      {/* Left: configuration list */}
       <aside className="flex w-80 shrink-0 flex-col border-r border-border bg-background">
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h1 className="text-lg font-medium">Configurations</h1>
+            <p className="text-xs text-muted-foreground">
+              {configurations.length} total
+            </p>
           </div>
           <CreateDialog onCreated={refreshConfigurations} />
         </div>
@@ -116,7 +257,28 @@ export function KioskConfigurations() {
                   key={config.id}
                   config={config}
                   isSelected={selectedConfigId === config.id}
+                  selectedSourceVersionId={
+                    selectedConfigId === config.id
+                      ? historicalPreviewVersion?.id
+                      : undefined
+                  }
+                  duplicating={duplicatingConfigId === config.id}
+                  versionPicker={
+                    selectedConfigId === config.id ? (
+                      <SelectedConfigurationVersionPicker
+                        loading={loadingManagementState}
+                        hasSavedVersions={hasSavedVersions}
+                        selectedVersionId={selectedVersionId}
+                        versionOptions={versionOptions}
+                        onSelectedVersionChange={setSelectedVersionId}
+                      />
+                    ) : null
+                  }
                   onSelect={() => setSelectedConfigId(config.id)}
+                  onEdit={(sourceVersionId) =>
+                    handleOpenEditor(config.id, sourceVersionId)
+                  }
+                  onDuplicate={() => handleDuplicateConfiguration(config)}
                   onMutated={refreshConfigurations}
                 />
               ))}
@@ -125,16 +287,19 @@ export function KioskConfigurations() {
         </div>
       </aside>
 
-      {/* Right: iframe preview */}
-      <main className="min-w-0 flex-1 bg-muted/30">
+      <main className="min-w-0 flex-1 bg-muted/20">
         {selectedConfig ? (
-          <iframe
-            key={selectedConfig.id}
-            title={`Preview: ${selectedConfig.name}`}
-            src={`/viewer/${selectedConfig.id}`}
-            className="h-full w-full border-0"
-            sandbox="allow-same-origin allow-scripts"
-          />
+          <div className="h-full">
+            {previewSrc ? (
+              <iframe
+                key={`${selectedConfig.id}:${selectedVersionId}`}
+                title={`Preview: ${selectedConfig.name}`}
+                src={previewSrc}
+                className="h-full w-full border-0"
+                sandbox="allow-same-origin allow-scripts"
+              />
+            ) : null}
+          </div>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <HugeiconsIcon icon={ComputerIcon} className="size-12 opacity-50" />
@@ -152,12 +317,22 @@ export function KioskConfigurations() {
 function ConfigurationRow({
   config,
   isSelected,
+  selectedSourceVersionId,
+  duplicating,
+  versionPicker,
   onSelect,
+  onEdit,
+  onDuplicate,
   onMutated,
 }: {
   config: KioskConfig
   isSelected: boolean
+  selectedSourceVersionId?: string
+  duplicating: boolean
+  versionPicker: React.ReactNode
   onSelect: () => void
+  onEdit: (sourceVersionId?: string) => void
+  onDuplicate: () => void
   onMutated: () => Promise<void>
 }) {
   const navigate = useNavigate()
@@ -216,143 +391,209 @@ function ConfigurationRow({
 
   return (
     <div
-      className={`flex items-center gap-2 rounded-lg px-4 py-3 ring-1 transition-colors ${
+      className={`rounded-lg px-4 py-3 ring-1 transition-colors ${
         isSelected
           ? 'bg-primary/10 ring-primary/30 dark:bg-primary/15'
           : 'bg-card ring-foreground/10'
       }`}
     >
-      <div className="min-w-0 flex-1">
-        {editing ? (
-          <div className="flex items-center gap-1.5">
-            <Input
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              autoFocus
-              className="h-6 text-sm"
-            />
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={handleSaveName}
-              disabled={saving}
-            >
-              {saving ? (
-                <Spinner />
-              ) : (
-                <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
-              )}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => {
-                setEditing(false)
-                setEditName(config.name)
-              }}
-            >
-              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
-            </Button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onSelect}
-            className="w-full rounded-md text-left focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 -m-1 p-1 hover:underline"
-          >
-            <p className="truncate text-sm font-medium">
-              {config.name}
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {config.width} × {config.height}
-            </p>
-          </button>
-        )}
-      </div>
-
-      {!editing && (
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Open in editor"
-          onClick={() =>
-            navigate({ to: '/editor/$kioskId', params: { kioskId: config.id } })
-          }
-        >
-          <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
-        </Button>
-      )}
-
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                className="h-6 text-sm"
+              />
               <Button
                 variant="ghost"
-                size="icon-sm"
-                aria-label="Actions"
-              />
-            }
-          >
-            <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() =>
-                navigate({ to: '/editor/$kioskId', params: { kioskId: config.id } })
-              }
+                size="icon-xs"
+                onClick={handleSaveName}
+                disabled={saving}
+              >
+                {saving ? (
+                  <Spinner />
+                ) : (
+                  <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => {
+                  setEditing(false)
+                  setEditName(config.name)
+                }}
+              >
+                <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} />
+              </Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onSelect}
+              className="w-full rounded-md text-left focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 -m-1 p-1 hover:underline"
             >
-              <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
-              Open in Editor
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                navigate({ to: '/viewer/$configId', params: { configId: config.id } })
-              }
-            >
-              <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
-              Preview
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                setEditName(config.name)
-                setEditing(true)
-              }}
-            >
-              <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
-              Rename
-            </DropdownMenuItem>
-            <AlertDialogTrigger
-              nativeButton={false}
-              render={<DropdownMenuItem variant="destructive" />}
-            >
-              <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
-              Delete
-            </AlertDialogTrigger>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <p className="truncate text-sm font-medium">
+                {config.name}
+              </p>
+              <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{config.width} × {config.height}</span>
+                <span>&middot;</span>
+                <span>
+                  {config.currentVersion
+                    ? `Current v${config.currentVersion.version}`
+                    : 'No saved versions'}
+                </span>
+              </div>
+            </button>
+          )}
+        </div>
 
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete configuration?</AlertDialogTitle>
-            <AlertDialogDescription>
-              &ldquo;{config.name}&rdquo; will be permanently deleted. This
-              action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
+        {!editing && (
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Open in editor"
+            onClick={() => onEdit(isSelected ? selectedSourceVersionId : undefined)}
+          >
+            <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
+          </Button>
+        )}
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Actions"
+                />
+              }
             >
-              {deleting ? <Spinner /> : 'Delete'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+              <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => onEdit(isSelected ? selectedSourceVersionId : undefined)}
+              >
+                <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
+                Open in Editor
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  navigate({ to: '/viewer/$configId', params: { configId: config.id } })
+                }
+              >
+                <HugeiconsIcon icon={ArrowRight01Icon} strokeWidth={2} />
+                Preview
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  setEditName(config.name)
+                  setEditing(true)
+                }}
+              >
+                <HugeiconsIcon icon={PencilEdit01Icon} strokeWidth={2} />
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDuplicate} disabled={duplicating}>
+                <HugeiconsIcon icon={Add01Icon} strokeWidth={2} />
+                {duplicating ? 'Duplicating...' : 'Duplicate'}
+              </DropdownMenuItem>
+              <AlertDialogTrigger
+                nativeButton={false}
+                render={<DropdownMenuItem variant="destructive" />}
+              >
+                <HugeiconsIcon icon={Delete02Icon} strokeWidth={2} />
+                Delete
+              </AlertDialogTrigger>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete configuration?</AlertDialogTitle>
+              <AlertDialogDescription>
+                &ldquo;{config.name}&rdquo; will be permanently deleted. This
+                action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleting}
+              >
+                {deleting ? <Spinner /> : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+
+      {isSelected && versionPicker ? (
+        <div className="mt-3 border-t border-border/60 pt-3">
+          {versionPicker}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function SelectedConfigurationVersionPicker({
+  loading,
+  hasSavedVersions,
+  selectedVersionId,
+  versionOptions,
+  onSelectedVersionChange,
+}: {
+  loading: boolean
+  hasSavedVersions: boolean
+  selectedVersionId: string
+  versionOptions: Array<{ value: string; label: string }>
+  onSelectedVersionChange: (value: string) => void
+}) {
+  return (
+    <div className="rounded-md bg-background/70 p-1">
+      {loading ? (
+        <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
+          <Spinner className="size-3" />
+          Loading versions
+        </div>
+      ) : hasSavedVersions ? (
+        <Select
+          items={versionOptions}
+          value={selectedVersionId}
+          onValueChange={(value) => {
+            if (value) {
+              onSelectedVersionChange(value)
+            }
+          }}
+        >
+          <SelectTrigger className="w-full justify-start bg-background text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {versionOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      ) : (
+        <p className="px-2 py-1 text-xs text-muted-foreground">
+          No saved versions yet
+        </p>
+      )}
     </div>
   )
 }

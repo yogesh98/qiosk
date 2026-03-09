@@ -1,10 +1,20 @@
 import { Outlet, createFileRoute, redirect } from '@tanstack/react-router'
+import { z } from 'zod'
 import { getKioskConfigurationViewerStateFn } from '@/utils/kiosk-configurations/kiosk-configurations.functions'
 
 export const Route = createFileRoute('/viewer/$configId')({
-  loader: async ({ params, location }) => {
+  validateSearch: z.object({
+    versionId: z.string().optional(),
+  }),
+  loaderDeps: ({ search }) => ({
+    versionId: search.versionId,
+  }),
+  loader: async ({ params, location, deps }) => {
     const viewerState = (await getKioskConfigurationViewerStateFn({
-      data: { id: params.configId },
+      data: {
+        id: params.configId,
+        versionId: deps.versionId,
+      },
     }))
 
     const { currentContent } = viewerState
@@ -19,6 +29,7 @@ export const Route = createFileRoute('/viewer/$configId')({
       throw redirect({
         to: '/viewer/$configId/$pageId',
         params: { configId: params.configId, pageId: firstPageId },
+        search: deps,
       })
     }
 
@@ -30,6 +41,7 @@ export const Route = createFileRoute('/viewer/$configId')({
       throw redirect({
         to: '/viewer/$configId/$pageId',
         params: { configId: params.configId, pageId: firstPageId },
+        search: deps,
       })
     }
 

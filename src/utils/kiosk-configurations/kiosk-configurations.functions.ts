@@ -4,8 +4,10 @@ import { requireApprovedUser } from '@/utils/auth/rbac'
 import {
   createKioskConfiguration,
   deleteKioskConfiguration,
+  duplicateKioskConfiguration,
   getKioskConfigurationById,
   getKioskConfigurationEditorState,
+  getKioskConfigurationManagementState,
   getKioskConfigurationViewerState,
   getKioskConfigurationsByUser,
   saveKioskConfiguration,
@@ -27,6 +29,20 @@ const updateNameSchema = z.object({
 
 const byIdSchema = z.object({
   id: z.string(),
+})
+
+const managementStateSchema = z.object({
+  id: z.string(),
+})
+
+const editorStateSchema = z.object({
+  id: z.string(),
+  sourceVersionId: z.string().optional(),
+})
+
+const viewerStateSchema = z.object({
+  id: z.string(),
+  versionId: z.string().optional(),
 })
 
 const saveContentSchema = z.object({
@@ -59,13 +75,28 @@ export const getKioskConfigurationFn = createServerFn({ method: 'GET' })
     return getKioskConfigurationById(data.id, userId)
   })
 
-export const getKioskConfigurationEditorStateFn = createServerFn({ method: 'GET' })
-  .inputValidator(byIdSchema)
+export const getKioskConfigurationManagementStateFn = createServerFn({
+  method: 'GET',
+})
+  .inputValidator(managementStateSchema)
   .handler(async ({ data }) => {
     const userId = await requireUserId()
     const existing = await getKioskConfigurationById(data.id, userId)
     if (!existing) throw new Error('Configuration not found')
-    return (await getKioskConfigurationEditorState(data.id, userId))!
+    return (await getKioskConfigurationManagementState(data.id, userId))!
+  })
+
+export const getKioskConfigurationEditorStateFn = createServerFn({ method: 'GET' })
+  .inputValidator(editorStateSchema)
+  .handler(async ({ data }) => {
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return (await getKioskConfigurationEditorState(
+      data.id,
+      userId,
+      data.sourceVersionId,
+    ))!
   })
 
 export const saveKioskConfigurationFn = createServerFn({
@@ -108,10 +139,19 @@ export const deleteKioskConfigurationFn = createServerFn({ method: 'POST' })
     await deleteKioskConfiguration(data.id, userId)
   })
 
-export const getKioskConfigurationViewerStateFn = createServerFn({ method: 'GET' })
+export const duplicateKioskConfigurationFn = createServerFn({ method: 'POST' })
   .inputValidator(byIdSchema)
   .handler(async ({ data }) => {
-    const state = await getKioskConfigurationViewerState(data.id)
+    const userId = await requireUserId()
+    const existing = await getKioskConfigurationById(data.id, userId)
+    if (!existing) throw new Error('Configuration not found')
+    return duplicateKioskConfiguration(data.id, userId)
+  })
+
+export const getKioskConfigurationViewerStateFn = createServerFn({ method: 'GET' })
+  .inputValidator(viewerStateSchema)
+  .handler(async ({ data }) => {
+    const state = await getKioskConfigurationViewerState(data.id, data.versionId)
     if (!state) throw new Error('Configuration not found')
     return state
   })
