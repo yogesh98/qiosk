@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import type {
   KioskConfigurationContent,
   KioskConfigurationContentComponent,
@@ -64,6 +65,8 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
   const persistingRef = useRef(false)
   const selectedPageIdRef = useRef(state.selectedPageId)
   selectedPageIdRef.current = state.selectedPageId
+  const redoStackRef = useRef(state.redoStack)
+  redoStackRef.current = state.redoStack
   const pendingPersistRef = useRef<{ content: KioskConfigurationContent; changeType: string } | null>(null)
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -279,13 +282,17 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
 
   const persistCurrentContent = useCallback(
     (changeType: string) => {
-      flushPersist()
-      setState((s) => {
-        sendPersist(s.content, changeType)
-        return { ...s, redoStack: [] }
+      cancelPendingPersist()
+      let content: KioskConfigurationContent
+      flushSync(() => {
+        setState((s) => {
+          content = s.content
+          return { ...s, redoStack: [] }
+        })
       })
+      sendPersist(content!, changeType)
     },
-    [flushPersist, sendPersist],
+    [cancelPendingPersist, sendPersist],
   )
 
   const moveComponentLocal = useCallback(
@@ -482,7 +489,7 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
       setState((s) => ({
         ...s,
         content: withPage.content,
-        selectedPageId: s.content.pages.find((p) => p.id === s.selectedPageId)
+        selectedPageId: withPage.content.pages.find((p) => p.id === s.selectedPageId)
           ? s.selectedPageId
           : withPage.selectedPageId,
         selectedComponentId: null,
@@ -498,19 +505,18 @@ export function useKioskEditor(editorState: KioskConfigurationEditorState) {
 
   const redo = useCallback(() => {
     flushPersist()
-    setState((s) => {
-      if (s.redoStack.length === 0) return s
-      const [next, ...rest] = s.redoStack
-      const withPage = ensureAtLeastOnePage(next)
-      sendPersist(withPage.content, 'redo')
-      return {
-        ...s,
-        content: withPage.content,
-        selectedPageId: withPage.selectedPageId,
-        selectedComponentId: null,
-        redoStack: rest,
-      }
-    })
+    const stack = redoStackRef.current
+    if (stack.length === 0) return
+    const [next, ...rest] = stack
+    const withPage = ensureAtLeastOnePage(next)
+    sendPersist(withPage.content, 'redo')
+    setState((s) => ({
+      ...s,
+      content: withPage.content,
+      selectedPageId: withPage.selectedPageId,
+      selectedComponentId: null,
+      redoStack: rest,
+    }))
   }, [flushPersist, sendPersist])
 
   const save = useCallback(async () => {
