@@ -1,6 +1,8 @@
 import { FrameCornersIcon } from "@phosphor-icons/react/dist/ssr";
+import Link from "next/link";
 
 import { CreateTemplateSheet } from "@/app/dashboard/templates/create-template-sheet";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -25,7 +27,7 @@ function aspectLabel(width: number, height: number) {
 }
 
 function TemplateCard({ template }: { template: TemplateRow }) {
-  const { width, height, name, description, created_at } = template;
+  const { id, width, height, name, description, created_at } = template;
   const orientation =
     width === height ? "Square" : width > height ? "Landscape" : "Portrait";
 
@@ -56,6 +58,13 @@ function TemplateCard({ template }: { template: TemplateRow }) {
 
       <CardFooter className="justify-between text-xs text-muted-foreground">
         <span>Created {formatCreatedAt(created_at)}</span>
+        <Button
+          size="sm"
+          variant="outline"
+          render={<Link href={`/dashboard/templates/${id}/edit`} />}
+        >
+          Edit
+        </Button>
       </CardFooter>
     </Card>
   );
